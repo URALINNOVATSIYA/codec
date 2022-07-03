@@ -1,0 +1,4 @@
+github.com/google/uuid v1.3.0 h1:t6JiXgmwXMjEs8VusXIJk2BXHsn+wx8BZdTaoZ5fu7I=
+github.com/google/uuid v1.3.0/go.mod h1:TIyPZe4MgqvfeYDBFedMoGGpEw/LqOeaOT+nhxU+yHo=
+gitlab.twin24.ai/twin/common-go/gil v0.0.0-20220702115307-7e8cc94e32ff h1:w/KcaMRVCIyd49w0DWBf08FBDBzDI+MMkrb3nukNrG0=
+gitlab.twin24.ai/twin/common-go/gil v0.0.0-20220702115307-7e8cc94e32ff/go.mod h1:s1w4vSkO17Tdx8jpI94vbMztKizRDHbJ6BSSOuLdjQU=
