@@ -72,4 +72,25 @@ RegisterType(reflect.TypeOf(v))
 of function value because function type does not have ant information about function
 name. To get full information you must register functions through ```RegisterTypeOf```  
 
-You can also turn off automatic registration of types calling ```TurnOffTypeAutoRegistration``` 
+You can also turn off automatic registration of types calling ```TurnOffTypeAutoRegistration```
+
+# Custom serialization
+
+To implement your own custom serialization a type must implements ```Serializable``` interface:
+
+```go
+type Flag bool
+
+func (f Flag) Serialize() []byte {
+	if f {
+		return []byte{1}
+	}
+	return []byte{0}
+}
+
+func (f Flag) Unserialize(data []byte) (any, error) {
+	return data[0] == 1, nil
+}
+```
+
+**Note:** methods of ```Serializable``` must relate to a type value, not to pointer to the value.  
