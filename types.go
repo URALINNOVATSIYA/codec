@@ -546,6 +546,16 @@ func TurnOnTypeAutoRegistration() {
 	tChecker.typeAutoReg = true
 }
 
+var structCodingMode int
+
+func SetStructCodingMode(mode int) {
+	structCodingMode = mode
+}
+
+func GetStructCodingMode() int {
+	return structCodingMode
+}
+
 func id(v any) byte {
 	t := reflect.TypeOf(v)
 	if t.Kind() == reflect.Func {

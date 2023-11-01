@@ -932,7 +932,7 @@ func TestReferenceSerialization(t *testing.T) {
 	checkSerializer(args, t)
 }
 
-func TestStructAndSerializableSerialization(t *testing.T) {
+func TestStructBasedSerialization(t *testing.T) {
 	s := &testStruct{
 		F1: "abc",
 		F2: true,
@@ -984,33 +984,168 @@ func TestStructAndSerializableSerialization(t *testing.T) {
 				tByte, 123,
 			},
 		},
+	}
+	checkSerializer(args, t)
+}
+func TestIndexStructSerialization(t *testing.T) {
+	s := &testStruct{
+		F1: "abc",
+		F2: true,
+		F3: nil,
+		F4: nil,
+		f5: 321,
+		f6: "#",
+	}
+	s.F3 = s
+	s.F4 = &s.F1
+	var args = []serializerTestArgs{
 		{
-			&testCustomStruct{
-				f1: true,
-				f2: "abc",
-				f3: 123,
-			},
+			s,
 			[]byte{
-				version, tPointer,
-				tType | custom, id(testCustomStruct{}), tStruct, 16,
-				version, tType, id([]any{}), tList, 3,
-				tInterface, tInt, 123,
-				tInterface, tString, 3, 97, 98, 99,
-				tInterface, tBool | tru,
+				version,
+				tPointer,                            // *testStruct
+				tType, id(testStruct{}), tStruct, 6, // struct header
+				0, tString, 3, 97, 98, 99, // "abc"
+				1, tBool | tru, // true
+				2, tRef, 1, // self ref
+				3, tInterface, tRef, 2, // *s.F1
+				4, tInt | signed | 0b0001, 2, 130, // 321
+				5, tString, 1, 35,
 			},
 		},
 		{
-			testCustomUint(123),
+			errors.New("err"),
+			[]byte{
+				version, tPointer,
+				tType, id(reflect.ValueOf(errors.New("")).Elem().Interface()), tStruct, 1,
+				0, tString, 3, 101, 114, 114, // "err"
+			},
+		},
+		{
+			struct {
+				f1 bool
+				f2 byte
+			}{
+				true,
+				123,
+			},
 			[]byte{
 				version,
-				tType | custom, id(testCustomUint(0)), tInt, 8,
-				0, 0, 0, 0, 0, 0, 0, 123,
+				tType, id(struct {
+					f1 bool
+					f2 byte
+				}{}), tStruct, 2,
+				0, tBool | tru,
+				1, tByte, 123,
+			},
+		},
+		{
+			struct {
+				f1 bool
+				f2 bool
+				f3 string
+				f4 byte
+			}{
+				true,
+				false,
+				"string",
+				100,
+			},
+			[]byte{
+				version,
+				tType, id(struct {
+					f1 bool
+					f2 bool
+					f3 string
+					f4 byte
+				}{}), tStruct, 4,
+				0, tBool | tru,
+				1, tBool,
+				2, tString, 6, 115, 116, 114, 105, 110, 103,
+				3, tByte, 100,
 			},
 		},
 	}
 	checkSerializer(args, t)
 }
+func TestNameStructSerialization(t *testing.T) {
+	s := &testStruct{
+		F1: "abc",
+		F2: true,
+		F3: nil,
+		F4: nil,
+		f5: 321,
+		f6: "#",
+	}
+	s.F3 = s
+	s.F4 = &s.F1
+	var args = []serializerTestArgs{
+		{
 
+			s,
+			[]byte{
+				version,
+				tPointer,                            // *testStruct
+				tType, id(testStruct{}), tStruct, 6, // struct header
+				70, 49, tString, 3, 97, 98, 99, // "abc"
+				70, 50, tBool | tru, // true
+				70, 51, tRef, 1, // self ref
+				70, 52, tInterface, tRef, 2, // *s.F1
+				102, 53, tInt | signed | 0b0001, 2, 130, // 321
+				102, 54, tString, 1, 35,
+			},
+		},
+		{
+			struct {
+				a int
+				b bool
+				c string
+			}{
+				150,
+				false,
+				"abc",
+			},
+			[]byte{
+				version,
+				tType, id(struct {
+					a int
+					b bool
+					c string
+				}{}), tStruct, 3,
+				97, tInt | signed | 0b0001, 1, 44,
+				98, tBool,
+				99, tString, 3, 97, 98, 99,
+			},
+		},
+		{
+			errors.New("err"),
+			[]byte{
+				version, tPointer,
+				tType, id(reflect.ValueOf(errors.New("")).Elem().Interface()), tStruct, 1, 115,
+				tString, 3, 101, 114, 114, // "err"
+			},
+		},
+		{
+			struct {
+				f1 bool
+				f2 byte
+			}{
+				true,
+				123,
+			},
+			[]byte{
+				version,
+				tType, id(struct {
+					f1 bool
+					f2 byte
+				}{}), tStruct, 2,
+				102, 49, tBool | tru,
+				102, 50, tByte, 123,
+			},
+		},
+	}
+	checkSerializer(args, t)
+}
 func TestChanSerialization(t *testing.T) {
 	var args = []serializerTestArgs{
 		{

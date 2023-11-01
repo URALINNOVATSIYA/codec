@@ -8,6 +8,15 @@ import (
 	"unsafe"
 )
 
+const (
+	standartStructureCodingMode   = 0
+	fieldIndexStructureCodingMode = 1
+	fieldNameStructureCodingMode  = 2
+	mod1                          = 0
+	mod2                          = 1
+	mod3                          = 2
+)
+
 type Serializer struct {
 	refs map[string]uint32
 	cnt  uint32
@@ -273,13 +282,48 @@ func (s *Serializer) encodeLength(typeSignature []byte, length int) []byte {
 func (s *Serializer) encodeStruct(v reflect.Value) []byte {
 	var f []byte
 	var i, fieldCount int
-	for i, fieldCount = 0, v.NumField(); i < fieldCount; i++ {
-		f = append(f, s.encode(v.Field(i))...)
+
+	SetStructCodingMode(mod2)
+	mode := GetStructCodingMode()
+
+	switch mode {
+	case standartStructureCodingMode:
+
+		for i, fieldCount = 0, v.NumField(); i < fieldCount; i++ {
+			f = append(f, s.encode(v.Field(i))...)
+		}
+		b := tChecker.typeSignatureOf(v)
+		b = s.encodeLength(b, fieldCount)
+		b = append(b, f...)
+		return b
+
+	case fieldIndexStructureCodingMode:
+
+		for i, fieldCount = 0, v.NumField(); i < fieldCount; i++ {
+			fieldIndexBytes := []byte{byte(i)}
+			f = append(f, fieldIndexBytes...)
+			f = append(f, s.encode(v.Field(i))...)
+		}
+		b := tChecker.typeSignatureOf(v)
+		b = s.encodeLength(b, fieldCount)
+		b = append(b, f...)
+		return b
+
+	case fieldNameStructureCodingMode:
+		t := v.Type()
+		for i, fieldCount = 0, v.NumField(); i < fieldCount; i++ {
+			fieldName := []byte(t.Field(i).Name)
+			f = append(f, fieldName...)
+			f = append(f, s.encode(v.Field(i))...)
+		}
+		b := tChecker.typeSignatureOf(v)
+		b = s.encodeLength(b, fieldCount)
+		b = append(b, f...)
+		return b
+
 	}
-	b := tChecker.typeSignatureOf(v)
-	b = s.encodeLength(b, fieldCount)
-	b = append(b, f...)
-	return b
+
+	return nil
 }
 
 func (s *Serializer) encodeChan(v reflect.Value) []byte {
