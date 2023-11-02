@@ -549,7 +549,11 @@ func TurnOnTypeAutoRegistration() {
 var structCodingMode int
 
 func SetStructCodingMode(mode int) {
-	structCodingMode = mode
+	if mode >= 0 && mode <= 2 {
+		structCodingMode = mode
+	} else {
+		panic("No CodingMode found")
+	}
 }
 
 func GetStructCodingMode() int {
