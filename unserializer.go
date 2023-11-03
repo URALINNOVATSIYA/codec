@@ -389,12 +389,54 @@ func (u *Unserializer) decodeStruct() (reflect.Value, error) {
 	u.refs[u.cnt] = v
 	u.cnt++
 	length := int(l)
-	for i := 0; i < length; i++ {
-		f := v.Field(i)
-		f = reflect.NewAt(f.Type(), unsafe.Pointer(f.UnsafeAddr())).Elem()
-		_, err = u.decode(f)
-		if err != nil {
-			return v, err
+
+	switch GetStructCodingMode() {
+
+	case StructCodingModeIndex:
+		for i := 0; i < length; i++ {
+			index, err := u.decodeInt()
+			if err != nil {
+				return v, err
+			}
+
+			f := v.Field(int(index.Int()))
+			f = reflect.NewAt(f.Type(), unsafe.Pointer(f.UnsafeAddr())).Elem()
+			_, err = u.decode(f)
+			if err != nil {
+				return v, err
+			}
+		}
+
+	case StructCodingModeName:
+
+		for i := 0; i < length; i++ {
+			fieldNameVal, err := u.decodeString()
+			if err != nil {
+				return v, err
+			}
+			fieldName := fieldNameVal.String()
+
+			f := v.FieldByName(fieldName)
+			if !f.IsValid() {
+				continue
+			}
+
+			f = reflect.NewAt(f.Type(), unsafe.Pointer(f.UnsafeAddr())).Elem()
+			_, err = u.decode(f)
+
+			if err != nil {
+				return v, err
+			}
+
+		}
+	default:
+		for i := 0; i < length; i++ {
+			f := v.Field(i)
+			f = reflect.NewAt(f.Type(), unsafe.Pointer(f.UnsafeAddr())).Elem()
+			_, err = u.decode(f)
+			if err != nil {
+				return v, err
+			}
 		}
 	}
 	return v, nil

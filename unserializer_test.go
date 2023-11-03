@@ -225,7 +225,8 @@ func TestMapUnserialization(t *testing.T) {
 	checkUnserializer(items, t)
 }
 
-func TestStructAndSerializableUnserialization(t *testing.T) {
+func TestDefaultStructAndSerializableUnserialization(t *testing.T) {
+	SetStructCodingMode(StructCodingModeDefault)
 	s := &testStruct{
 		F1: "abc",
 		F2: true,
@@ -253,6 +254,71 @@ func TestStructAndSerializableUnserialization(t *testing.T) {
 		},
 		testCustomUint(123),
 	}
+
+	checkUnserializer(items, t)
+}
+func TestIndexStructAndSerializableUnserialization(t *testing.T) {
+	SetStructCodingMode(StructCodingModeIndex)
+	s := &testStruct{
+		F1: "abc",
+		F2: true,
+		F3: nil,
+		F4: nil,
+		f5: 321,
+		f6: "#",
+	}
+	s.F3 = s
+	s.F4 = &s.F1
+	var items = []any{
+		s,
+		struct {
+			f1 bool
+			f2 byte
+		}{
+			true,
+			123,
+		},
+		errors.New("err"),
+		testCustomStruct{
+			f1: true,
+			f2: "abc",
+			f3: 123,
+		},
+		testCustomUint(123),
+	}
+
+	checkUnserializer(items, t)
+}
+func TestNameStructAndSerializableUnserialization(t *testing.T) {
+	SetStructCodingMode(StructCodingModeName)
+	s := &testStruct{
+		F1: "abc",
+		F2: true,
+		F3: nil,
+		F4: nil,
+		f5: 321,
+		f6: "#",
+	}
+	s.F3 = s
+	s.F4 = &s.F1
+	var items = []any{
+		s,
+		struct {
+			f1 bool
+			f2 byte
+		}{
+			true,
+			123,
+		},
+		errors.New("err"),
+		testCustomStruct{
+			f1: true,
+			f2: "abc",
+			f3: 123,
+		},
+		testCustomUint(123),
+	}
+
 	checkUnserializer(items, t)
 }
 
