@@ -549,10 +549,11 @@ func TurnOnTypeAutoRegistration() {
 var structCodingMode int
 
 func SetStructCodingMode(mode int) {
-	if mode >= 0 && mode <= 2 {
-		structCodingMode = mode
+	if mode < StructCodingModeDefault && mode > StructCodingModeName {
+		panic(fmt.Sprintf("Invalid structure coding mode %d", mode))
+
 	} else {
-		panic("No CodingMode found")
+		structCodingMode = mode
 	}
 }
 

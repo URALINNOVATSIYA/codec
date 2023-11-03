@@ -226,7 +226,7 @@ func TestMapUnserialization(t *testing.T) {
 }
 
 func TestDefaultStructAndSerializableUnserialization(t *testing.T) {
-	SetStructCodingMode(0)
+	SetStructCodingMode(StructCodingModeDefault)
 	s := &testStruct{
 		F1: "abc",
 		F2: true,
@@ -258,7 +258,7 @@ func TestDefaultStructAndSerializableUnserialization(t *testing.T) {
 	checkUnserializer(items, t)
 }
 func TestIndexStructAndSerializableUnserialization(t *testing.T) {
-	SetStructCodingMode(1)
+	SetStructCodingMode(StructCodingModeIndex)
 	s := &testStruct{
 		F1: "abc",
 		F2: true,
@@ -290,7 +290,7 @@ func TestIndexStructAndSerializableUnserialization(t *testing.T) {
 	checkUnserializer(items, t)
 }
 func TestNameStructAndSerializableUnserialization(t *testing.T) {
-	SetStructCodingMode(2)
+	SetStructCodingMode(StructCodingModeName)
 	s := &testStruct{
 		F1: "abc",
 		F2: true,

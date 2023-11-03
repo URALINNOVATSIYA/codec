@@ -282,12 +282,6 @@ func (s *Serializer) encodeStruct(v reflect.Value) []byte {
 
 	switch GetStructCodingMode() {
 
-	case StructCodingModeDefault:
-
-		for i, fieldCount = 0, v.NumField(); i < fieldCount; i++ {
-			f = append(f, s.encode(v.Field(i))...)
-		}
-
 	case StructCodingModeIndex:
 
 		for i, fieldCount = 0, v.NumField(); i < fieldCount; i++ {
@@ -300,13 +294,13 @@ func (s *Serializer) encodeStruct(v reflect.Value) []byte {
 
 		for i, fieldCount = 0, v.NumField(); i < fieldCount; i++ {
 
-			fieldName := t.Field(i).Name
-			f = append(f, s.encodeString(reflect.ValueOf(fieldName))...)
+			f = append(f, s.encodeString(reflect.ValueOf(t.Field(i).Name))...)
 			f = append(f, s.encode(v.Field(i))...)
 		}
 	default:
-		fmt.Println("No method found")
-		return nil
+		for i, fieldCount = 0, v.NumField(); i < fieldCount; i++ {
+			f = append(f, s.encode(v.Field(i))...)
+		}
 	}
 
 	b := tChecker.typeSignatureOf(v)
