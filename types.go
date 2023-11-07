@@ -573,7 +573,7 @@ func init() {
 	tChecker.init()
 }
 
-func GetRegisteredTypeNames() []string {
+func getRegisteredTypeNames() []string {
 	var typeNames []string
 
 	for typeName := range tChecker.typeNames {
