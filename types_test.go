@@ -3,6 +3,7 @@ package codec
 import (
 	"bytes"
 	"errors"
+	"fmt"
 	"reflect"
 	"testing"
 	"unsafe"
@@ -404,4 +405,11 @@ func checkTypeSignature(items [][]any, t *testing.T) {
 			t.Errorf("typeSignatureOf(%#v) expected %v, but actual value is %v", item[0], expected, actual)
 		}
 	}
+}
+func TestGetRegisteredTypeNames(t *testing.T) {
+	a := GetRegisteredTypeNames()
+
+	fmt.Println(len(a))
+	fmt.Println(a)
+
 }

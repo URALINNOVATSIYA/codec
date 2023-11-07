@@ -572,3 +572,12 @@ func id(v any) byte {
 func init() {
 	tChecker.init()
 }
+
+func GetRegisteredTypeNames() []string {
+	var typeNames []string
+
+	for typeName := range tChecker.typeNames {
+		typeNames = append(typeNames, typeName)
+	}
+	return typeNames
+}
