@@ -546,15 +546,19 @@ func TurnOnTypeAutoRegistration() {
 	tChecker.typeAutoReg = true
 }
 
+const (
+	StructCodingModeDefault = 0
+	StructCodingModeIndex   = 1
+	StructCodingModeName    = 2
+)
+
 var structCodingMode int
 
 func SetStructCodingMode(mode int) {
 	if mode < StructCodingModeDefault && mode > StructCodingModeName {
 		panic(fmt.Sprintf("Invalid structure coding mode %d", mode))
-
-	} else {
-		structCodingMode = mode
 	}
+	structCodingMode = mode
 }
 
 func GetStructCodingMode() int {

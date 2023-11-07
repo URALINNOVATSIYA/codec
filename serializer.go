@@ -8,12 +8,6 @@ import (
 	"unsafe"
 )
 
-const (
-	StructCodingModeDefault = 0
-	StructCodingModeIndex   = 1
-	StructCodingModeName    = 2
-)
-
 type Serializer struct {
 	refs map[string]uint32
 	cnt  uint32
@@ -279,21 +273,15 @@ func (s *Serializer) encodeLength(typeSignature []byte, length int) []byte {
 func (s *Serializer) encodeStruct(v reflect.Value) []byte {
 	var f []byte
 	var i, fieldCount int
-
 	switch GetStructCodingMode() {
-
 	case StructCodingModeIndex:
-
 		for i, fieldCount = 0, v.NumField(); i < fieldCount; i++ {
 			f = append(f, s.encodeInt(reflect.ValueOf(i))...)
 			f = append(f, s.encode(v.Field(i))...)
 		}
-
 	case StructCodingModeName:
 		t := v.Type()
-
 		for i, fieldCount = 0, v.NumField(); i < fieldCount; i++ {
-
 			f = append(f, s.encodeString(reflect.ValueOf(t.Field(i).Name))...)
 			f = append(f, s.encode(v.Field(i))...)
 		}
@@ -302,11 +290,9 @@ func (s *Serializer) encodeStruct(v reflect.Value) []byte {
 			f = append(f, s.encode(v.Field(i))...)
 		}
 	}
-
 	b := tChecker.typeSignatureOf(v)
 	b = s.encodeLength(b, fieldCount)
 	b = append(b, f...)
-
 	return b
 }
 
