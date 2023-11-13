@@ -321,7 +321,51 @@ func TestNameStructAndSerializableUnserialization(t *testing.T) {
 
 	checkUnserializer(items, t)
 }
+func TestDecodeStructWithPrivateFields(t *testing.T) {
+	SetStructCodingMode(StructCodingModeName)
 
+	type PrivateFieldsStruct struct {
+		P1 int
+		p1 int
+		P2 byte
+		p2 byte
+		P3 string
+		p3 string
+		P4 bool
+		p4 bool
+	}
+
+	obj := PrivateFieldsStruct{
+		P1: 42,
+		p1: 1204,
+		P2: 23,
+		p2: 11,
+		P3: "StringTest",
+		p3: "PrivateString",
+		P4: true,
+		p4: true,
+	}
+	serealizer := NewSerializer()
+	serialized := serealizer.Encode(obj)
+	unserealizer := NewUnserializer()
+
+	unserealized, _ := unserealizer.Decode(serialized)
+
+	expected := PrivateFieldsStruct{
+		P1: 42,
+		p1: 0,
+		P2: 23,
+		p2: 0,
+		P3: "StringTest",
+		p3: "",
+		P4: true,
+		p4: false,
+	}
+
+	if unserealized != expected {
+		t.Errorf("Unexpected result. Got: %v, Expected: %v", unserealized, expected)
+	}
+}
 func TestPointerUnserialization(t *testing.T) {
 	values := make([]any, 8)
 	// *Nil
@@ -388,6 +432,7 @@ func checkUnserializer(values []any, t *testing.T) {
 				}
 			} else {
 				equals = reflect.DeepEqual(expected, actual)
+
 			}
 			if !equals {
 				t.Errorf("Unserializer::decode(%#v) returns wrong value %#v", expected, actual)
