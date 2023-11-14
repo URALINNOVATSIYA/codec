@@ -322,7 +322,7 @@ func TestNameStructAndSerializableUnserialization(t *testing.T) {
 	checkUnserializer(items, t)
 }
 func TestDecodeStructWithPrivateFields(t *testing.T) {
-	SetStructCodingMode(StructCodingModeName)
+	SetStructCodingMode(StructCodingModeDefault)
 
 	type PrivateFieldsStruct struct {
 		P1 int

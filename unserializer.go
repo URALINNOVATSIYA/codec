@@ -427,7 +427,7 @@ func (u *Unserializer) decodeStruct() (reflect.Value, error) {
 				}
 				continue
 			}
-
+			f = reflect.NewAt(f.Type(), unsafe.Pointer(f.UnsafeAddr())).Elem()
 			_, err = u.decode(f)
 			if err != nil {
 				return v, err
@@ -437,6 +437,7 @@ func (u *Unserializer) decodeStruct() (reflect.Value, error) {
 		for i := 0; i < length; i++ {
 			f := v.Field(i)
 			if f.CanSet() {
+				f = reflect.NewAt(f.Type(), unsafe.Pointer(f.UnsafeAddr())).Elem()
 				_, err = u.decode(f)
 				if err != nil {
 					return v, err
