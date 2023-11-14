@@ -107,9 +107,7 @@ func (u *Unserializer) decode(value reflect.Value) (v reflect.Value, err error) 
 		return v, err
 	}
 	if value.IsValid() {
-		//if v.IsValid() {
 		value.Set(v)
-		//}
 	} else {
 		value = v
 	}
