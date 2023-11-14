@@ -275,7 +275,9 @@ func (ch *typeChecker) registerType(t reflect.Type) []byte {
 func (ch *typeChecker) registerFunc(f reflect.Value) []byte {
 	ch.tmx.Lock()
 	s, id := ch.formFuncSignature(f)
-	if !f.IsNil() {
+	if f.IsNil() {
+		ch.types[string(s)] = f.Type()
+	} else {
 		ch.funcs[string(s)] = f
 	}
 	ch.typeSignatures[id] = s
@@ -499,10 +501,9 @@ func (ch *typeChecker) fullTypeName(t reflect.Type) string {
 func (ch *typeChecker) valueOf(typeSignature []byte) (reflect.Value, error) {
 	if typeSignature[len(typeSignature)-1] == tFunc {
 		f, err := ch.funcOf(typeSignature)
-		if err != nil {
-			return reflect.Value{}, err
+		if err == nil {
+			return f, nil
 		}
-		return f, nil
 	}
 	t, err := ch.typeOf(typeSignature)
 	if err != nil {

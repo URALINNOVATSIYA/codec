@@ -7,6 +7,7 @@ import (
 	"reflect"
 	"strings"
 	"testing"
+	"text/scanner"
 	"unsafe"
 )
 
@@ -264,11 +265,9 @@ func TestStructAndSerializableUnserialization(t *testing.T) {
 }
 
 func TestStructWithPrivateFieldsUnserialization(t *testing.T) {
-	externalType := bytes.Buffer{} // scanner.Scanner{}//strings.NewReader("test")
-	//externalType.Init(strings.NewReader("test"))
-	//externalType.Error = func(s *scanner.Scanner, msg string) {}
-	//externalType.IsIdentRune = func(ch rune, i int) bool { return false }
-	//SetStructCodingMode(StructCodingModeDefault)
+	externalType := scanner.Scanner{}
+	externalType.Init(strings.NewReader("test"))
+	SetStructCodingMode(StructCodingModeDefault)
 	checkUnserializer([]any{externalType}, t)
 }
 
@@ -311,6 +310,7 @@ func TestChanUnserialization(t *testing.T) {
 
 func TestFuncUnserialization(t *testing.T) {
 	var items = []any{
+		(func(bool, uint))(nil),
 		Serialize,
 		Unserialize,
 	}
