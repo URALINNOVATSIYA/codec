@@ -190,6 +190,7 @@ func TestBasicUnserialization(t *testing.T) {
 func TestListUnserialization(t *testing.T) {
 	var items = []any{
 		// Slices
+		([]byte)(nil),
 		[]int{},
 		[]int{1, -1, 0, 1234, -1234},
 		[]uint{},
@@ -216,6 +217,7 @@ func TestListUnserialization(t *testing.T) {
 
 func TestMapUnserialization(t *testing.T) {
 	var items = []any{
+		(map[byte]byte)(nil),
 		map[string]bool{"a": true, "b": false},
 		map[int32]int8{-1: 2, 3: -4, -123456: -128},
 		testMap{"a": 1, "b": 2, "c": 3},
@@ -225,8 +227,7 @@ func TestMapUnserialization(t *testing.T) {
 	checkUnserializer(items, t)
 }
 
-func TestDefaultStructAndSerializableUnserialization(t *testing.T) {
-	SetStructCodingMode(StructCodingModeDefault)
+func TestStructAndSerializableUnserialization(t *testing.T) {
 	s := &testStruct{
 		F1: "abc",
 		F2: true,
@@ -254,72 +255,21 @@ func TestDefaultStructAndSerializableUnserialization(t *testing.T) {
 		},
 		testCustomUint(123),
 	}
-
-	checkUnserializer(items, t)
-}
-func TestIndexStructAndSerializableUnserialization(t *testing.T) {
 	SetStructCodingMode(StructCodingModeIndex)
-	s := &testStruct{
-		F1: "abc",
-		F2: true,
-		F3: nil,
-		F4: nil,
-		f5: 321,
-		f6: "#",
-	}
-	s.F3 = s
-	s.F4 = &s.F1
-	var items = []any{
-		s,
-		struct {
-			f1 bool
-			f2 byte
-		}{
-			true,
-			123,
-		},
-		errors.New("err"),
-		testCustomStruct{
-			f1: true,
-			f2: "abc",
-			f3: 123,
-		},
-		testCustomUint(123),
-	}
-
+	checkUnserializer(items, t)
+	SetStructCodingMode(StructCodingModeName)
+	checkUnserializer(items, t)
+	SetStructCodingMode(StructCodingModeDefault)
 	checkUnserializer(items, t)
 }
-func TestNameStructAndSerializableUnserialization(t *testing.T) {
-	SetStructCodingMode(StructCodingModeName)
-	s := &testStruct{
-		F1: "abc",
-		F2: true,
-		F3: nil,
-		F4: nil,
-		f5: 321,
-		f6: "#",
-	}
-	s.F3 = s
-	s.F4 = &s.F1
-	var items = []any{
-		s,
-		struct {
-			f1 bool
-			f2 byte
-		}{
-			true,
-			123,
-		},
-		errors.New("err"),
-		testCustomStruct{
-			f1: true,
-			f2: "abc",
-			f3: 123,
-		},
-		testCustomUint(123),
-	}
 
-	checkUnserializer(items, t)
+func TestStructWithPrivateFieldsUnserialization(t *testing.T) {
+	externalType := bytes.Buffer{} // scanner.Scanner{}//strings.NewReader("test")
+	//externalType.Init(strings.NewReader("test"))
+	//externalType.Error = func(s *scanner.Scanner, msg string) {}
+	//externalType.IsIdentRune = func(ch rune, i int) bool { return false }
+	//SetStructCodingMode(StructCodingModeDefault)
+	checkUnserializer([]any{externalType}, t)
 }
 
 func TestPointerUnserialization(t *testing.T) {
@@ -350,6 +300,7 @@ func TestPointerUnserialization(t *testing.T) {
 
 func TestChanUnserialization(t *testing.T) {
 	var items = []any{
+		(chan<- []int8)(nil),
 		make(chan int),
 		make(chan<- bool, 1),
 		make(<-chan *testStruct, 2),

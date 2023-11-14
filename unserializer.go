@@ -47,9 +47,13 @@ func (u *Unserializer) Decode(data []byte) (value any, err error) {
 }
 
 func (u *Unserializer) decode(value reflect.Value) (v reflect.Value, err error) {
+	isNil := false
 	t := u.data[u.pos]
 	if t&mask == tType && t&custom == 0 {
-		t = u.data[u.pos+int(t&0b111)+2]
+		if t&null != 0 {
+			isNil = true
+		}
+		t = u.data[u.pos+int(t&0b11)+2]
 	}
 	cnt := u.cnt
 	proceed := true
@@ -76,13 +80,13 @@ func (u *Unserializer) decode(value reflect.Value) (v reflect.Value, err error) 
 		if t&tFunc == tFunc {
 			v, err = u.decodeFunc()
 		} else {
-			v, err = u.decodeChan()
+			v, err = u.decodeChan(isNil)
 		}
 	case tList:
-		v, err = u.decodeList()
+		v, err = u.decodeList(isNil)
 		proceed = false
 	case tMap:
-		v, err = u.decodeMap()
+		v, err = u.decodeMap(isNil)
 		proceed = false
 	case tStruct:
 		v, err = u.decodeStruct()
@@ -103,7 +107,9 @@ func (u *Unserializer) decode(value reflect.Value) (v reflect.Value, err error) 
 		return v, err
 	}
 	if value.IsValid() {
+		//if v.IsValid() {
 		value.Set(v)
+		//}
 	} else {
 		value = v
 	}
@@ -117,7 +123,7 @@ func (u *Unserializer) decode(value reflect.Value) (v reflect.Value, err error) 
 }
 
 func (u *Unserializer) decodeSerializable() (reflect.Value, error) {
-	v, l, _, err := u.decodeTypeWithLength()
+	v, l, _, err := u.decodeTypeWithLength(false)
 	if err != nil {
 		return v, err
 	}
@@ -156,7 +162,7 @@ func (u *Unserializer) decodeBool() (reflect.Value, error) {
 }
 
 func (u *Unserializer) decodeString() (reflect.Value, error) {
-	v, length, _, err := u.decodeTypeWithLength()
+	v, length, _, err := u.decodeTypeWithLength(false)
 	if err != nil {
 		return v, err
 	}
@@ -252,7 +258,7 @@ func (u *Unserializer) decodeFixedInt() (reflect.Value, error) {
 }
 
 func (u *Unserializer) decodeInt() (reflect.Value, error) {
-	v, i, t, err := u.decodeTypeWithLength()
+	v, i, t, err := u.decodeTypeWithLength(false)
 	if err != nil {
 		return v, err
 	}
@@ -267,7 +273,7 @@ func (u *Unserializer) decodeInt() (reflect.Value, error) {
 }
 
 func (u *Unserializer) decodeFloat() (reflect.Value, error) {
-	v, f, t, err := u.decodeTypeWithLength()
+	v, f, t, err := u.decodeTypeWithLength(false)
 	if err != nil {
 		return v, err
 	}
@@ -301,7 +307,7 @@ func (u *Unserializer) decodeComplex() (v reflect.Value, err error) {
 }
 
 func (u *Unserializer) decodeUintptr() (reflect.Value, error) {
-	v, ptr, t, err := u.decodeTypeWithLength()
+	v, ptr, t, err := u.decodeTypeWithLength(false)
 	if err != nil {
 		return v, err
 	}
@@ -313,10 +319,13 @@ func (u *Unserializer) decodeUintptr() (reflect.Value, error) {
 	return v, nil
 }
 
-func (u *Unserializer) decodeChan() (reflect.Value, error) {
+func (u *Unserializer) decodeChan(isNil bool) (reflect.Value, error) {
 	v, err := u.decodeType()
 	if err != nil {
 		return v, err
+	}
+	if isNil {
+		return v, nil
 	}
 	size := int(u.data[u.pos]&0b111) + 1
 	u.pos++
@@ -337,16 +346,17 @@ func (u *Unserializer) decodeChan() (reflect.Value, error) {
 }
 
 func (u *Unserializer) decodeFunc() (reflect.Value, error) {
-	return u.decodeType()
+	v, err := u.decodeType()
+	return v, err
 }
 
-func (u *Unserializer) decodeList() (reflect.Value, error) {
-	v, l, t, err := u.decodeTypeWithLength()
+func (u *Unserializer) decodeList(isNil bool) (reflect.Value, error) {
+	v, l, t, err := u.decodeTypeWithLength(isNil)
 	if err != nil {
 		return v, err
 	}
 	length := int(l)
-	if t&fixed == 0 {
+	if t&fixed == 0 && !isNil {
 		v = reflect.MakeSlice(v.Type(), length, length)
 	}
 	u.refs[u.cnt] = v
@@ -359,13 +369,15 @@ func (u *Unserializer) decodeList() (reflect.Value, error) {
 	return v, nil
 }
 
-func (u *Unserializer) decodeMap() (reflect.Value, error) {
-	mp, l, _, err := u.decodeTypeWithLength()
+func (u *Unserializer) decodeMap(isNil bool) (reflect.Value, error) {
+	mp, l, _, err := u.decodeTypeWithLength(isNil)
 	if err != nil {
 		return mp, err
 	}
 	length := int(l)
-	mp = reflect.MakeMapWithSize(mp.Type(), length)
+	if !isNil {
+		mp = reflect.MakeMapWithSize(mp.Type(), length)
+	}
 	u.refs[u.cnt] = mp
 	u.cnt++
 	var k, v reflect.Value
@@ -380,9 +392,8 @@ func (u *Unserializer) decodeMap() (reflect.Value, error) {
 	}
 	return mp, nil
 }
-
 func (u *Unserializer) decodeStruct() (reflect.Value, error) {
-	v, l, _, err := u.decodeTypeWithLength()
+	v, l, _, err := u.decodeTypeWithLength(false)
 	if err != nil {
 		return v, err
 	}
@@ -410,10 +421,9 @@ func (u *Unserializer) decodeStruct() (reflect.Value, error) {
 				return v, err
 			}
 			f := v.FieldByName(fieldName.String())
-			if !f.IsValid() {
-				continue
+			if f.IsValid() {
+				f = reflect.NewAt(f.Type(), unsafe.Pointer(f.UnsafeAddr())).Elem()
 			}
-			f = reflect.NewAt(f.Type(), unsafe.Pointer(f.UnsafeAddr())).Elem()
 			_, err = u.decode(f)
 			if err != nil {
 				return v, err
@@ -532,21 +542,21 @@ func (u *Unserializer) decodeInterface() (reflect.Value, error) {
 
 func (u *Unserializer) decodeType() (reflect.Value, error) {
 	typeSignature, err := u.readTypeSignature()
-	if len(typeSignature) == 1 && typeSignature[0] == tPointer {
-		return reflect.Value{}, err
-	}
-	if err != nil {
+	if err != nil || len(typeSignature) == 1 && typeSignature[0] == tPointer {
 		return reflect.Value{}, err
 	}
 	return tChecker.valueOf(typeSignature)
 }
 
-func (u *Unserializer) decodeTypeWithLength() (reflect.Value, uint64, byte, error) {
+func (u *Unserializer) decodeTypeWithLength(isNil bool) (reflect.Value, uint64, byte, error) {
 	v, err := u.decodeType()
 	if err != nil {
 		return v, 0, 0, err
 	}
 	t := u.data[u.pos-1]
+	if isNil {
+		return v, 0, t, nil
+	}
 	size := int((t & 0b111) + 1)
 	length, err := u.readLength(size)
 	if err != nil {
@@ -586,7 +596,7 @@ func (u *Unserializer) readTypeSignature() ([]byte, error) {
 	u.pos++
 	switch t & mask {
 	case tType:
-		size := int((t & 0b111) + 1)
+		size := int((t & 0b11) + 1)
 		u.pos += size
 		if u.pos > u.size {
 			return nil, io.ErrUnexpectedEOF

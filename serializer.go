@@ -58,7 +58,9 @@ func (s *Serializer) encode(v reflect.Value) []byte {
 		bytes = s.encodeUnsafePointer(v)
 	case reflect.Pointer:
 		bytes = s.encodePointer(v)
-	case reflect.Slice, reflect.Array:
+	case reflect.Array:
+		bytes = s.encodeArray(v)
+	case reflect.Slice:
 		bytes = s.encodeList(v)
 	case reflect.Map:
 		bytes = s.encodeMap(v)
@@ -97,8 +99,7 @@ func (s *Serializer) encodeReferenceValue(cnt uint32) []byte {
 
 func (s *Serializer) encodeSerializable(v reflect.Value) []byte {
 	body := v.MethodByName("Serialize").Call(nil)[0].Interface().([]byte)
-	b := tChecker.typeSignatureOf(v)
-	b = s.encodeLength(b, len(body))
+	b := s.encodeTypeSignatureWithLength(v, false, len(body))
 	b = append(b, body...)
 	b[0] |= custom
 	return b
@@ -118,7 +119,7 @@ func (s *Serializer) encodeBool(v reflect.Value) []byte {
 
 func (s *Serializer) encodeString(v reflect.Value) []byte {
 	str := v.String()
-	return append(s.encodeLength(tChecker.typeSignatureOf(v), len(str)), str...)
+	return append(s.encodeTypeSignatureWithLength(v, false, len(str)), str...)
 }
 
 func (s *Serializer) encodeInt(v reflect.Value) []byte {
@@ -241,9 +242,18 @@ func (s *Serializer) encodeReference(cnt uint32) []byte {
 	return s.encodeUint([]byte{tRef}, uint64(cnt))
 }
 
+func (s *Serializer) encodeArray(v reflect.Value) []byte {
+	length := v.Len()
+	b := s.encodeTypeSignatureWithLength(v, false, length)
+	for i := 0; i < length; i++ {
+		b = append(b, s.encode(v.Index(i))...)
+	}
+	return b
+}
+
 func (s *Serializer) encodeList(v reflect.Value) []byte {
 	length := v.Len()
-	b := s.encodeLength(tChecker.typeSignatureOf(v), length)
+	b := s.encodeTypeSignatureWithLength(v, true, length)
 	for i := 0; i < length; i++ {
 		b = append(b, s.encode(v.Index(i))...)
 	}
@@ -252,7 +262,7 @@ func (s *Serializer) encodeList(v reflect.Value) []byte {
 
 func (s *Serializer) encodeMap(v reflect.Value) []byte {
 	length := v.Len()
-	b := s.encodeLength(tChecker.typeSignatureOf(v), length)
+	b := s.encodeTypeSignatureWithLength(v, true, length)
 	iter := v.MapRange()
 	for iter.Next() {
 		b = append(b, s.encode(iter.Key())...)
@@ -261,7 +271,12 @@ func (s *Serializer) encodeMap(v reflect.Value) []byte {
 	return b
 }
 
-func (s *Serializer) encodeLength(typeSignature []byte, length int) []byte {
+func (s *Serializer) encodeTypeSignatureWithLength(v reflect.Value, canBeNil bool, length int) []byte {
+	typeSignature := tChecker.typeSignatureOf(v)
+	if canBeNil && v.IsNil() {
+		typeSignature[0] |= null
+		return typeSignature
+	}
 	byteSize, sizeBytes := toMinBytes(uint64(length))
 	b := make([]byte, 0, length+byteSize+len(typeSignature))
 	b = append(b, typeSignature...)
@@ -290,26 +305,35 @@ func (s *Serializer) encodeStruct(v reflect.Value) []byte {
 			f = append(f, s.encode(v.Field(i))...)
 		}
 	}
-	b := tChecker.typeSignatureOf(v)
-	b = s.encodeLength(b, fieldCount)
+	b := s.encodeTypeSignatureWithLength(v, false, fieldCount)
 	b = append(b, f...)
 	return b
 }
 
 func (s *Serializer) encodeChan(v reflect.Value) []byte {
-	b := tChecker.typeSignatureOf(v)
+	b := s.typeSignatureOf(v, true)
 	b[len(b)-1] |= byte(v.Type().ChanDir())
-	b = append(b, s.encodeUint([]byte{tInt}, uint64(v.Cap()))...)
+	if !v.IsNil() {
+		b = append(b, s.encodeUint([]byte{tInt}, uint64(v.Cap()))...)
+	}
 	return b
 }
 
 func (s *Serializer) encodeFunc(v reflect.Value) []byte {
-	return tChecker.typeSignatureOf(v)
+	return s.typeSignatureOf(v, true)
 }
 
 func (s *Serializer) encodeInterface(v reflect.Value) []byte {
 	s.cnt--
 	return append(tChecker.typeSignatureOf(v), s.encode(v.Elem())...)
+}
+
+func (s *Serializer) typeSignatureOf(v reflect.Value, canBeNil bool) []byte {
+	b := tChecker.typeSignatureOf(v)
+	if canBeNil && v.IsNil() {
+		b[0] |= null
+	}
+	return b
 }
 
 func Serialize(value any) []byte {

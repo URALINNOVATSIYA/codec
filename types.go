@@ -42,6 +42,7 @@ const (
 	raw     byte = 0b0000_1000 // determines unsafe.Pointer for tUintptr
 	val     byte = 0b0000_1000 // determines a reference that contains a value that some pointer points to
 	custom  byte = 0b0000_1000 // determines whether the type implements custom serialization
+	null    byte = 0b0000_0100 // determines whether underlying type value is nil
 	mask    byte = 0b1111_0000 // type mask
 )
 
@@ -274,20 +275,22 @@ func (ch *typeChecker) registerType(t reflect.Type) []byte {
 func (ch *typeChecker) registerFunc(f reflect.Value) []byte {
 	ch.tmx.Lock()
 	s, id := ch.formFuncSignature(f)
-	ch.funcs[string(s)] = f
+	if !f.IsNil() {
+		ch.funcs[string(s)] = f
+	}
 	ch.typeSignatures[id] = s
 	ch.tmx.Unlock()
 	return append([]byte{}, s...)
 }
 
 func (ch *typeChecker) typeSignatureOf(v reflect.Value) []byte {
-	if v.IsValid() {
-		if v.Kind() == reflect.Func {
-			return ch.funcSignature(v)
-		}
-		return ch.typeSignature(v.Type())
+	if !v.IsValid() {
+		return []byte{tNil}
 	}
-	return []byte{tNil}
+	if v.Kind() == reflect.Func {
+		return ch.funcSignature(v)
+	}
+	return ch.typeSignature(v.Type())
 }
 
 func (ch *typeChecker) typeSignature(t reflect.Type) []byte {
@@ -315,12 +318,6 @@ func (ch *typeChecker) funcSignature(f reflect.Value) []byte {
 	ch.tmx.RLock()
 	id := ch.funcId(f)
 	signature, exists := ch.typeSignatures[id]
-	if exists {
-		ch.tmx.RUnlock()
-		return append([]byte{}, signature...)
-	}
-	id = ch.typeId(f.Type())
-	signature, exists = ch.typeSignatures[id]
 	if exists {
 		ch.tmx.RUnlock()
 		return append([]byte{}, signature...)
@@ -430,7 +427,11 @@ func (ch *typeChecker) typeId(t reflect.Type) int {
 }
 
 func (ch *typeChecker) funcId(f reflect.Value) int {
-	return ch.nameToId(funcName(f))
+	name := funcName(f)
+	if name != "" {
+		return ch.nameToId(name)
+	}
+	return ch.typeId(f.Type())
 }
 
 func (ch *typeChecker) nameToId(name string) int {

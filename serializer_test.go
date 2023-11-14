@@ -690,6 +690,10 @@ func TestListSerialization(t *testing.T) {
 	var args = []serializerTestArgs{
 		// Slices
 		{
+			([]string)(nil),
+			[]byte{version, tType | null, id([]string{}), tList},
+		},
+		{
 			[]string{},
 			[]byte{version, tType, id([]string{}), tList, 0},
 		},
@@ -752,8 +756,8 @@ func TestListSerialization(t *testing.T) {
 			testRecSlice{testRecSlice{nil}, nil},
 			[]byte{
 				version, tType, id(testRecSlice{}), tList, 2,
-				tType, id(testRecSlice{}), tList, 1, tType, id(testRecSlice{}), tList, 0,
-				tType, id(testRecSlice{}), tList, 0,
+				tType, id(testRecSlice{}), tList, 1, tType | null, id(testRecSlice{}), tList,
+				tType | null, id(testRecSlice{}), tList,
 			},
 		},
 		// Arrays
@@ -1196,6 +1200,10 @@ func TestNameStructSerialization(t *testing.T) {
 func TestChanSerialization(t *testing.T) {
 	var args = []serializerTestArgs{
 		{
+			(<-chan bool)(nil),
+			[]byte{version, tType | null, id(make(<-chan bool)), tChan | byte(reflect.RecvDir)},
+		},
+		{
 			make(chan int),
 			[]byte{version, tType, id(make(chan int)), tChan | byte(reflect.BothDir), tInt, 0},
 		},
@@ -1217,6 +1225,10 @@ func TestChanSerialization(t *testing.T) {
 
 func TestFuncSerialization(t *testing.T) {
 	var args = []serializerTestArgs{
+		{
+			(func(byte, bool) int8)(nil),
+			[]byte{version, tType | null, id((func(byte, bool) int8)(nil)), tFunc},
+		},
 		{
 			Serialize,
 			[]byte{version, tType, id(Serialize), tFunc},
