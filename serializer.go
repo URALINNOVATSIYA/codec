@@ -228,8 +228,8 @@ func (s *Serializer) encodePointer(v reflect.Value) []byte {
 	_, b := toMinBytes(uint64(v.Pointer()))
 	el := v.Elem()
 	if el.IsValid() {
-		_, b2 := toMinBytes(uint64(tChecker.typeId(v.Elem().Type())))
-		b = append(b, b2...)
+		_, idBytes := toMinBytes(uint64(tChecker.typeId(el.Type())))
+		b = append(b, idBytes...)
 	}
 	cnt, ok := s.refs[*(*string)(unsafe.Pointer(&b))]
 	if ok {
@@ -291,7 +291,7 @@ func (s *Serializer) encodeStruct(v reflect.Value) []byte {
 	switch GetStructCodingMode() {
 	case StructCodingModeIndex:
 		for i, fieldCount = 0, v.NumField(); i < fieldCount; i++ {
-			f = append(f, s.encodeInt(reflect.ValueOf(i))...)
+			f = append(f, s.encodeInt(reflect.ValueOf(uint(i)))...)
 			f = append(f, s.encode(v.Field(i))...)
 		}
 	case StructCodingModeName:
@@ -305,9 +305,7 @@ func (s *Serializer) encodeStruct(v reflect.Value) []byte {
 			f = append(f, s.encode(v.Field(i))...)
 		}
 	}
-	b := s.encodeTypeSignatureWithLength(v, false, fieldCount)
-	b = append(b, f...)
-	return b
+	return append(s.encodeTypeSignatureWithLength(v, false, fieldCount), f...)
 }
 
 func (s *Serializer) encodeChan(v reflect.Value) []byte {
@@ -324,8 +322,12 @@ func (s *Serializer) encodeFunc(v reflect.Value) []byte {
 }
 
 func (s *Serializer) encodeInterface(v reflect.Value) []byte {
+	b := s.typeSignatureOf(v, true)
+	if v.IsNil() {
+		return b
+	}
 	s.cnt--
-	return append(tChecker.typeSignatureOf(v), s.encode(v.Elem())...)
+	return append(b, s.encode(v.Elem())...)
 }
 
 func (s *Serializer) typeSignatureOf(v reflect.Value, canBeNil bool) []byte {

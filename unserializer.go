@@ -49,11 +49,13 @@ func (u *Unserializer) Decode(data []byte) (value any, err error) {
 func (u *Unserializer) decode(value reflect.Value) (v reflect.Value, err error) {
 	isNil := false
 	t := u.data[u.pos]
-	if t&mask == tType && t&custom == 0 {
+	if t&mask == tType {
 		if t&null != 0 {
 			isNil = true
 		}
-		t = u.data[u.pos+int(t&0b11)+2]
+		if t&custom == 0 {
+			t = u.data[u.pos+int(t&0b11)+2]
+		}
 	}
 	cnt := u.cnt
 	proceed := true
@@ -92,13 +94,13 @@ func (u *Unserializer) decode(value reflect.Value) (v reflect.Value, err error) 
 		v, err = u.decodeStruct()
 		proceed = false
 	case tPointer:
-		v, err = u.decodePointer()
+		v, err = u.decodePointer(value)
 		proceed = false
 	case tRef:
 		v, err = u.decodeReference(value)
 		proceed = false
 	case tInterface:
-		v, err = u.decodeInterface()
+		v, err = u.decodeInterface(isNil)
 		proceed = false
 	default:
 		return value, fmt.Errorf("unrecognized type %b", t)
@@ -107,7 +109,9 @@ func (u *Unserializer) decode(value reflect.Value) (v reflect.Value, err error) 
 		return v, err
 	}
 	if value.IsValid() {
-		value.Set(v)
+		if v.IsValid() {
+			value.Set(v)
+		}
 	} else {
 		value = v
 	}
@@ -405,7 +409,7 @@ func (u *Unserializer) decodeStruct() (reflect.Value, error) {
 			if err != nil {
 				return v, err
 			}
-			f := v.Field(int(index.Int()))
+			f := v.Field(int(index.Uint()))
 			f = reflect.NewAt(f.Type(), unsafe.Pointer(f.UnsafeAddr())).Elem()
 			_, err = u.decode(f)
 			if err != nil {
@@ -440,7 +444,7 @@ func (u *Unserializer) decodeStruct() (reflect.Value, error) {
 	return v, nil
 }
 
-func (u *Unserializer) decodePointer() (reflect.Value, error) {
+func (u *Unserializer) decodePointer(value reflect.Value) (reflect.Value, error) {
 	v, err := u.decodeType()
 	if err != nil {
 		return v, err
@@ -461,6 +465,9 @@ func (u *Unserializer) decodePointer() (reflect.Value, error) {
 		v = u.pointerTo(el)
 	}
 	u.refs[cnt] = v
+	if value.IsValid() && v.IsNil() {
+		return reflect.Value{}, nil
+	}
 	return v, nil
 }
 
@@ -529,12 +536,15 @@ func (u *Unserializer) pointerTo(v reflect.Value) reflect.Value {
 	return p
 }
 
-func (u *Unserializer) decodeInterface() (reflect.Value, error) {
+func (u *Unserializer) decodeInterface(isNil bool) (reflect.Value, error) {
 	v, err := u.decodeType()
 	if err != nil {
 		return v, err
 	}
 	u.refs[u.cnt] = v
+	if isNil {
+		return v, nil
+	}
 	return u.decode(v)
 }
 

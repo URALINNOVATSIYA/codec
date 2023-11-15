@@ -11,15 +11,25 @@ import (
 	"unsafe"
 )
 
-func TestBasicUnserialization(t *testing.T) {
+func TestNilUnserialization(t *testing.T) {
 	var items = []any{
-		// Nil
 		nil,
-		// Bool
+	}
+	checkUnserializer(items, t)
+}
+
+func TestBoolUnserialization(t *testing.T) {
+	var items = []any{
 		false,
 		true,
 		testBool(false),
 		testBool(true),
+	}
+	checkUnserializer(items, t)
+}
+
+func TestStringUnserialization(t *testing.T) {
+	var items = []any{
 		// String
 		"",
 		"a",
@@ -28,39 +38,23 @@ func TestBasicUnserialization(t *testing.T) {
 		strings.Repeat("a", 65536),
 		testString(""),
 		testString("abcdef"),
-		// Uint
-		uint(0),
-		uint(1),
-		uint(256),
-		uint(256 << 8),
-		uint(256 << 16),
-		uint(256 << 24),
-		uint(256 << 32),
-		uint(math.MaxUint),
-		testUint(0),
-		testUint(1234567),
-		// Int
-		0,
-		1,
-		-1,
-		127,
-		-128,
-		-129,
-		-123456,
-		123456,
-		12345678,
-		-123456789,
-		math.MaxInt,
-		math.MinInt,
-		testInt(0),
-		testInt(-123456),
-		// Uint8, Byte
+	}
+	checkUnserializer(items, t)
+}
+
+func TestUint8Unserialization(t *testing.T) {
+	var items = []any{
 		byte(0),
 		byte(1),
 		byte(255),
 		testUint8(0),
 		testUint8(255),
-		// Int8
+	}
+	checkUnserializer(items, t)
+}
+
+func TestInt8Unserialization(t *testing.T) {
+	var items = []any{
 		int8(0),
 		int8(1),
 		int8(-1),
@@ -68,14 +62,24 @@ func TestBasicUnserialization(t *testing.T) {
 		int8(127),
 		testInt8(0),
 		testInt8(-128),
-		// Uint16
+	}
+	checkUnserializer(items, t)
+}
+
+func TestUint16Unserialization(t *testing.T) {
+	var items = []any{
 		uint16(0),
 		uint16(1),
 		uint16(256),
 		uint16(65535),
 		testUint16(0),
 		testUint16(65535),
-		// Int16
+	}
+	checkUnserializer(items, t)
+}
+
+func TestInt16Unserialization(t *testing.T) {
+	var items = []any{
 		int16(0),
 		int16(1),
 		int16(-1),
@@ -85,7 +89,12 @@ func TestBasicUnserialization(t *testing.T) {
 		int16(32767),
 		testInt16(0),
 		testInt16(-32768),
-		// Uint32
+	}
+	checkUnserializer(items, t)
+}
+
+func TestUint32Unserialization(t *testing.T) {
+	var items = []any{
 		uint32(0),
 		uint32(1),
 		uint32(256),
@@ -94,7 +103,12 @@ func TestBasicUnserialization(t *testing.T) {
 		uint32(math.MaxUint32),
 		testUint32(0),
 		testUint32(12345678),
-		// Int32
+	}
+	checkUnserializer(items, t)
+}
+
+func TestInt32Unserialization(t *testing.T) {
+	var items = []any{
 		int32(0),
 		int32(1),
 		int32(-1),
@@ -108,7 +122,12 @@ func TestBasicUnserialization(t *testing.T) {
 		int32(math.MinInt32),
 		testInt32(0),
 		testInt32(-12345678),
-		// Uint64
+	}
+	checkUnserializer(items, t)
+}
+
+func TestUint64Unserialization(t *testing.T) {
+	var items = []any{
 		uint64(0),
 		uint64(1),
 		uint64(256),
@@ -120,7 +139,12 @@ func TestBasicUnserialization(t *testing.T) {
 		uint64(math.MaxUint64),
 		testUint64(0),
 		testUint64(1234567890),
-		// Int64
+	}
+	checkUnserializer(items, t)
+}
+
+func TestInt64Unserialization(t *testing.T) {
+	var items = []any{
 		int64(0),
 		int64(1),
 		int64(-1),
@@ -140,7 +164,48 @@ func TestBasicUnserialization(t *testing.T) {
 		int64(math.MinInt64),
 		testInt64(0),
 		testInt64(-1234567890),
-		// Float32
+	}
+	checkUnserializer(items, t)
+}
+
+func TestUintUnserialization(t *testing.T) {
+	var items = []any{
+		uint(0),
+		uint(1),
+		uint(256),
+		uint(256 << 8),
+		uint(256 << 16),
+		uint(256 << 24),
+		uint(256 << 32),
+		uint(math.MaxUint),
+		testUint(0),
+		testUint(1234567),
+	}
+	checkUnserializer(items, t)
+}
+
+func TestIntUnserialization(t *testing.T) {
+	var items = []any{
+		0,
+		1,
+		-1,
+		127,
+		-128,
+		-129,
+		-123456,
+		123456,
+		12345678,
+		-123456789,
+		math.MaxInt,
+		math.MinInt,
+		testInt(0),
+		testInt(-123456),
+	}
+	checkUnserializer(items, t)
+}
+
+func TestFloat32Unserialization(t *testing.T) {
+	var items = []any{
 		float32(0),
 		float32(1),
 		float32(-1),
@@ -150,7 +215,12 @@ func TestBasicUnserialization(t *testing.T) {
 		float32(-1.23),
 		testFloat32(0),
 		testFloat32(1.23),
-		// Float64
+	}
+	checkUnserializer(items, t)
+}
+
+func TestFloat64Unserialization(t *testing.T) {
+	var items = []any{
 		float64(0),
 		float64(1),
 		float64(-1),
@@ -160,7 +230,12 @@ func TestBasicUnserialization(t *testing.T) {
 		-1.23,
 		testFloat64(0),
 		testFloat64(-1.23),
-		// Complex64
+	}
+	checkUnserializer(items, t)
+}
+
+func TestComplex64Unserialization(t *testing.T) {
+	var items = []any{
 		complex(float32(0), float32(0)),
 		complex(float32(1), float32(0)),
 		complex(float32(0), float32(1)),
@@ -169,7 +244,12 @@ func TestBasicUnserialization(t *testing.T) {
 		complex(float32(1.23), float32(-1.23)),
 		complex(float32(-1.23), float32(1.23)),
 		testComplex64(complex(float32(1.23), float32(2))),
-		// Complex128
+	}
+	checkUnserializer(items, t)
+}
+
+func TestComplex128Unserialization(t *testing.T) {
+	var items = []any{
 		complex(float64(0), float64(0)),
 		complex(float64(1), float64(0)),
 		complex(float64(0), float64(1)),
@@ -178,19 +258,30 @@ func TestBasicUnserialization(t *testing.T) {
 		complex(1.23, -1.23),
 		complex(-1.23, 1.23),
 		testComplex128(complex(-1.23, 2.34)),
-		// uintptr
-		uintptr(123456),
-		testUintptr(1234567),
-		// Unsafe pointer
-		unsafe.Pointer(uintptr(123456)),
-		testRawPtr(uintptr(1234567)),
 	}
 	checkUnserializer(items, t)
 }
 
-func TestListUnserialization(t *testing.T) {
+func TestUintptrUnserialization(t *testing.T) {
 	var items = []any{
-		// Slices
+		uintptr(123456),
+		testUintptr(1234567),
+	}
+	checkUnserializer(items, t)
+}
+
+func TestUnsafePointerUnserialization(t *testing.T) {
+	var items = []any{
+		unsafe.Pointer(nil),
+		unsafe.Pointer(uintptr(123456)),
+		testUnsafePointer(nil),
+		testUnsafePointer(uintptr(1234567)),
+	}
+	checkUnserializer(items, t)
+}
+
+func TestSliceUnserialization(t *testing.T) {
+	var items = []any{
 		([]byte)(nil),
 		[]int{},
 		[]int{1, -1, 0, 1234, -1234},
@@ -203,7 +294,12 @@ func TestListUnserialization(t *testing.T) {
 		testSlice{"a", "ab", "abc"},
 		testGenericSlice[int]{1, 2, 3},
 		testRecSlice{testRecSlice{}, testRecSlice{testRecSlice{}}},
-		// Arrays
+	}
+	checkUnserializer(items, t)
+}
+
+func TestArrayUnserialization(t *testing.T) {
+	var items = []any{
 		[0]int{},
 		[1]int{-1},
 		[3]uint{1, 2, 3},
@@ -228,7 +324,27 @@ func TestMapUnserialization(t *testing.T) {
 	checkUnserializer(items, t)
 }
 
-func TestStructAndSerializableUnserialization(t *testing.T) {
+func TestChanUnserialization(t *testing.T) {
+	var items = []any{
+		(chan<- []int8)(nil),
+		make(chan int),
+		make(chan<- bool, 1),
+		make(<-chan *testStruct, 2),
+		make(testChan, 10),
+	}
+	checkUnserializer(items, t)
+}
+
+func TestFuncUnserialization(t *testing.T) {
+	var items = []any{
+		(func(bool, uint))(nil),
+		Serialize,
+		Unserialize,
+	}
+	checkUnserializer(items, t)
+}
+
+func TestStructUnserialization(t *testing.T) {
 	s := &testStruct{
 		F1: "abc",
 		F2: true,
@@ -248,13 +364,6 @@ func TestStructAndSerializableUnserialization(t *testing.T) {
 			true,
 			123,
 		},
-		errors.New("err"),
-		testCustomStruct{
-			f1: true,
-			f2: "abc",
-			f3: 123,
-		},
-		testCustomUint(123),
 	}
 	SetStructCodingMode(StructCodingModeIndex)
 	checkUnserializer(items, t)
@@ -265,10 +374,33 @@ func TestStructAndSerializableUnserialization(t *testing.T) {
 }
 
 func TestStructWithPrivateFieldsUnserialization(t *testing.T) {
-	externalType := scanner.Scanner{}
-	externalType.Init(strings.NewReader("test"))
-	SetStructCodingMode(StructCodingModeDefault)
-	checkUnserializer([]any{externalType}, t)
+	scan := scanner.Scanner{}
+	scan.Init(strings.NewReader("test"))
+	var items = []any{
+		errors.New("err"),
+		scan,
+		strings.NewReplacer("test1", "test2"),
+	}
+	checkUnserializer(items, t)
+}
+
+func TestSerializableUnserialization(t *testing.T) {
+	var items = []any{
+		testCustomStruct{
+			f1: true,
+			f2: "abc",
+			f3: 123,
+		},
+		testCustomUint(123),
+	}
+	checkUnserializer(items, t)
+}
+
+func TestInterfaceUnserialization(t *testing.T) {
+	var items = []any{
+		testInterface{},
+	}
+	checkUnserializer(items, t)
 }
 
 func TestPointerUnserialization(t *testing.T) {
@@ -295,67 +427,6 @@ func TestPointerUnserialization(t *testing.T) {
 	// testRectPtr
 	values[7] = testRecPtr(nil)
 	checkUnserializer(values, t)
-}
-
-func TestChanUnserialization(t *testing.T) {
-	var items = []any{
-		(chan<- []int8)(nil),
-		make(chan int),
-		make(chan<- bool, 1),
-		make(<-chan *testStruct, 2),
-		make(testChan, 10),
-	}
-	checkUnserializer(items, t)
-}
-
-func TestFuncUnserialization(t *testing.T) {
-	var items = []any{
-		(func(bool, uint))(nil),
-		Serialize,
-		Unserialize,
-	}
-	checkUnserializer(items, t)
-}
-
-func checkUnserializer(values []any, t *testing.T) {
-	registerTestTypes()
-	serializer := NewSerializer()
-	unserializer := NewUnserializer()
-	for _, expected := range values {
-		data := serializer.Encode(expected)
-		actual, err := unserializer.Decode(data)
-		if err != nil {
-			t.Errorf("Unserializer::decode(%#v) raises error: %q", expected, err)
-		} else {
-			var equals bool
-			if expected != nil {
-				switch reflect.TypeOf(expected).Kind() {
-				case reflect.Chan:
-					equals = channelEqual(expected, actual)
-				case reflect.Func:
-					equals = funcEqual(expected, actual)
-				default:
-					equals = reflect.DeepEqual(expected, actual)
-				}
-			} else {
-				equals = reflect.DeepEqual(expected, actual)
-			}
-			if !equals {
-				t.Errorf("Unserializer::decode(%#v) returns wrong value %#v", expected, actual)
-			}
-		}
-	}
-}
-
-func channelEqual(expected any, actual any) bool {
-	if tChecker.fullTypeName(reflect.TypeOf(expected)) != tChecker.fullTypeName(reflect.TypeOf(actual)) {
-		return false
-	}
-	return reflect.ValueOf(expected).Cap() == reflect.ValueOf(actual).Cap()
-}
-
-func funcEqual(expected any, actual any) bool {
-	return funcName(reflect.ValueOf(expected)) == funcName(reflect.ValueOf(actual))
 }
 
 func TestRecursiveReferenceUnserialization(t *testing.T) {
@@ -442,6 +513,47 @@ func TestMixedReferenceUnserialization(t *testing.T) {
 	if p.F4.([]any)[4] != &p.f6 {
 		t.Errorf("Unserializer::decode(%#v): element #4 of F4 does not point to f6", s)
 	}
+}
+
+func checkUnserializer(values []any, t *testing.T) {
+	registerTestTypes()
+	serializer := NewSerializer()
+	unserializer := NewUnserializer()
+	for _, expected := range values {
+		data := serializer.Encode(expected)
+		actual, err := unserializer.Decode(data)
+		if err != nil {
+			t.Errorf("Unserializer::decode(%#v) raises error: %q", expected, err)
+		} else {
+			var equals bool
+			if expected != nil {
+				switch reflect.TypeOf(expected).Kind() {
+				case reflect.Chan:
+					equals = channelEqual(expected, actual)
+				case reflect.Func:
+					equals = funcEqual(expected, actual)
+				default:
+					equals = reflect.DeepEqual(expected, actual)
+				}
+			} else {
+				equals = reflect.DeepEqual(expected, actual)
+			}
+			if !equals {
+				t.Errorf("Unserializer::decode(%#v) returns wrong value %#v", expected, actual)
+			}
+		}
+	}
+}
+
+func channelEqual(expected any, actual any) bool {
+	if tChecker.fullTypeName(reflect.TypeOf(expected)) != tChecker.fullTypeName(reflect.TypeOf(actual)) {
+		return false
+	}
+	return reflect.ValueOf(expected).Cap() == reflect.ValueOf(actual).Cap()
+}
+
+func funcEqual(expected any, actual any) bool {
+	return funcName(reflect.ValueOf(expected)) == funcName(reflect.ValueOf(actual))
 }
 
 func unserializedValue(expected any, t *testing.T) any {

@@ -3,6 +3,7 @@ package codec
 import (
 	"bytes"
 	"errors"
+	"io"
 	"reflect"
 	"testing"
 	"unsafe"
@@ -35,7 +36,7 @@ type (
 	testGenericMap[K comparable, V any] map[K]V
 	testRecMap                          map[byte]testRecMap
 	testPtr                             *bool
-	testRawPtr                          unsafe.Pointer
+	testUnsafePointer                   unsafe.Pointer
 	testUintptr                         uintptr
 	testRecPtr                          *testRecPtr
 	testChan                            <-chan *bool
@@ -46,6 +47,10 @@ type (
 		F4 any
 		f5 int
 		f6 string
+	}
+	testInterface struct {
+		src io.Reader
+		ref *io.Reader
 	}
 )
 
@@ -117,7 +122,7 @@ func registerTestTypes() {
 	RegisterTypeOf(testGenericMap[string, int32](nil))
 	RegisterTypeOf(testRecMap(nil))
 	RegisterTypeOf(testPtr(nil))
-	RegisterTypeOf(testRawPtr(nil))
+	RegisterTypeOf(testUnsafePointer(nil))
 	RegisterTypeOf(testUintptr(0))
 	RegisterTypeOf(testRecPtr(nil))
 	RegisterTypeOf(testChan(nil))
@@ -337,8 +342,8 @@ func TestTypeAliasesSignature(t *testing.T) {
 			[]byte{tType, id(testRecPtr(nil)), tPointer},
 		},
 		{
-			testRawPtr(nil),
-			[]byte{tType, id(testRawPtr(nil)), tUintptr | raw},
+			testUnsafePointer(nil),
+			[]byte{tType, id(testUnsafePointer(nil)), tUintptr | raw},
 		},
 		{
 			testUintptr(0),
