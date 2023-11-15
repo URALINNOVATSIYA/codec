@@ -1163,9 +1163,10 @@ func TestInterfaceSerialization(t *testing.T) {
 		{
 			v,
 			[]byte{
-				version, tType, id(v), tStruct, 2, // struct header
+				version, tType, id(v), tStruct, 3, // struct header
 				tType | null, byte(ioReaderId), tInterface, // io.Reader nil interface
 				tPointer, tNil, // nil pointer to io.Reader interface
+				tPointer, tNil, // nil pointer to testStruct
 			},
 		},
 	}

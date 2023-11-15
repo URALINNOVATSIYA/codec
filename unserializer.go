@@ -100,7 +100,7 @@ func (u *Unserializer) decode(value reflect.Value) (v reflect.Value, err error) 
 		v, err = u.decodeReference(value)
 		proceed = false
 	case tInterface:
-		v, err = u.decodeInterface(isNil)
+		v, err = u.decodeInterface(isNil || t&null != 0)
 		proceed = false
 	default:
 		return value, fmt.Errorf("unrecognized type %b", t)
@@ -109,9 +109,7 @@ func (u *Unserializer) decode(value reflect.Value) (v reflect.Value, err error) 
 		return v, err
 	}
 	if value.IsValid() {
-		if v.IsValid() {
-			value.Set(v)
-		}
+		value.Set(v)
 	} else {
 		value = v
 	}
@@ -146,6 +144,7 @@ func (u *Unserializer) decodeSerializable() (reflect.Value, error) {
 }
 
 func (u *Unserializer) decodeNil() reflect.Value {
+	u.pos++
 	return reflect.Value{}
 }
 
@@ -461,13 +460,18 @@ func (u *Unserializer) decodePointer(value reflect.Value) (reflect.Value, error)
 		if el.IsValid() {
 			changeValue(v, u.pointerTo(el).Interface())
 		}
-	} else {
+	} else if el.IsValid() {
 		v = u.pointerTo(el)
+	} else if value.IsValid() {
+		if value.Kind() == reflect.Interface {
+			v = u.pointerTo(reflect.Zero(value.Type().Elem()))
+		} else {
+			v = reflect.Zero(value.Type())
+		}
+	} else {
+		v = reflect.ValueOf((*any)(nil))
 	}
 	u.refs[cnt] = v
-	if value.IsValid() && v.IsNil() {
-		return reflect.Value{}, nil
-	}
 	return v, nil
 }
 

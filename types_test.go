@@ -51,6 +51,7 @@ type (
 	testInterface struct {
 		src io.Reader
 		ref *io.Reader
+		p   *testStruct
 	}
 )
 

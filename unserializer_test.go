@@ -398,7 +398,9 @@ func TestSerializableUnserialization(t *testing.T) {
 
 func TestInterfaceUnserialization(t *testing.T) {
 	var items = []any{
-		testInterface{},
+		testInterface{
+			p: &testStruct{},
+		},
 	}
 	checkUnserializer(items, t)
 }
