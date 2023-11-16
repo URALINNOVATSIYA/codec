@@ -297,7 +297,13 @@ func (s *Serializer) encodeStruct(v reflect.Value) []byte {
 	case StructCodingModeName:
 		t := v.Type()
 		for i, fieldCount = 0, v.NumField(); i < fieldCount; i++ {
-			f = append(f, s.encodeString(reflect.ValueOf(t.Field(i).Name))...)
+			fieldName := t.Field(i).Name
+			if fieldName == "_" {
+				f = append(f, s.encodeString(reflect.ValueOf(fieldName))...)
+				f = append(f, s.encodeInt(reflect.ValueOf(uint(i)))...)
+			} else {
+				f = append(f, s.encodeString(reflect.ValueOf(fieldName))...)
+			}
 			f = append(f, s.encode(v.Field(i))...)
 		}
 	default:

@@ -6,6 +6,7 @@ import (
 	"math"
 	"reflect"
 	"strings"
+	"sync"
 	"testing"
 	"text/scanner"
 	"unsafe"
@@ -376,11 +377,19 @@ func TestStructUnserialization(t *testing.T) {
 func TestStructWithPrivateFieldsUnserialization(t *testing.T) {
 	scan := scanner.Scanner{}
 	scan.Init(strings.NewReader("test"))
+	wg := &sync.WaitGroup{}
+	wg.Add(5)
 	var items = []any{
 		errors.New("err"),
 		scan,
 		strings.NewReplacer("test1", "test2"),
+		wg,
 	}
+	SetStructCodingMode(StructCodingModeIndex)
+	checkUnserializer(items, t)
+	SetStructCodingMode(StructCodingModeName)
+	checkUnserializer(items, t)
+	SetStructCodingMode(StructCodingModeDefault)
 	checkUnserializer(items, t)
 }
 
