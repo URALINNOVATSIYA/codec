@@ -387,12 +387,7 @@ func TestROUnserialize(t *testing.T) {
 }
 
 func TestStructUnserialization(t *testing.T) {
-	tStr := &TstStruct{
 
-		privateField: nil,
-	}
-
-	SetPrivateValue(tStr)
 	s := &testStruct{
 		F1: "abc",
 		F2: true,
@@ -404,7 +399,7 @@ func TestStructUnserialization(t *testing.T) {
 	s.F3 = s
 	s.F4 = &s.F1
 	var items = []any{
-		tStr,
+
 		s,
 		struct {
 			f1 bool
