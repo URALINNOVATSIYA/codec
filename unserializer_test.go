@@ -344,7 +344,55 @@ func TestFuncUnserialization(t *testing.T) {
 	checkUnserializer(items, t)
 }
 
+type privateFuncType func() int
+
+type TstStruct struct {
+	privateField privateFuncType
+	publicField  string
+}
+
+func privateFunc() int {
+	return 42
+}
+
+func SetPrivateValue(s *TstStruct) {
+	s.privateField = privateFunc
+}
+
+func TestROUnserialize(t *testing.T) {
+	tStr := &TstStruct{
+		privateField: nil,
+		publicField:  "abs",
+	}
+
+	SetPrivateValue(tStr)
+
+	serialized := Serialize(tStr)
+	unserialized, _ := Unserialize(serialized)
+
+	if tStr.publicField != unserialized.(*TstStruct).publicField {
+		t.Errorf("Public fields are not equal: expected '%s', got '%s'", tStr.publicField, unserialized.(*TstStruct).publicField)
+	}
+
+	expectedPrivateField := privateFunc()
+	if unserialized.(*TstStruct).privateField == nil {
+		t.Error("Private field is nil")
+	} else {
+		result := unserialized.(*TstStruct).privateField()
+		if result != expectedPrivateField {
+			t.Errorf("Private fields are not equal: expected '%d', got '%d'", expectedPrivateField, result)
+		}
+	}
+
+}
+
 func TestStructUnserialization(t *testing.T) {
+	tStr := &TstStruct{
+
+		privateField: nil,
+	}
+
+	SetPrivateValue(tStr)
 	s := &testStruct{
 		F1: "abc",
 		F2: true,
@@ -356,6 +404,7 @@ func TestStructUnserialization(t *testing.T) {
 	s.F3 = s
 	s.F4 = &s.F1
 	var items = []any{
+		tStr,
 		s,
 		struct {
 			f1 bool
