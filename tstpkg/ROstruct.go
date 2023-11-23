@@ -15,20 +15,20 @@ func SetPrivateValue(s *TstStruct) {
 	s.privateField = privateFunc
 }
 
-func Unser() *TstStruct {
-	tStr := &TstStruct{
-		privateField: nil,
+func NewTestStruct() TstStruct {
+	return TstStruct{
+		privateField: privateFunc,
 		publicField:  "abs",
 	}
-
-	SetPrivateValue(tStr)
-	return tStr
 }
 
-func (t *TstStruct) GetPublicField() string {
-	return t.publicField
+func (t TstStruct) AsInterface() interface{} {
+	return t
 }
 
-func (t *TstStruct) PrivateField() int {
-	return t.privateField()
+func CheckPrivateFunctionality(s interface{}) bool {
+	if ts, ok := s.(TstStruct); ok {
+		return ts.privateField() == privateFunc()
+	}
+	return false
 }

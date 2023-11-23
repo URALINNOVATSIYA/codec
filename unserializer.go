@@ -48,7 +48,7 @@ func (u *Unserializer) Decode(data []byte) (value any, err error) {
 }
 
 func (u *Unserializer) decode(value reflect.Value) (v reflect.Value, err error) {
-	initReflectFlags()
+
 	isNil := false
 	t := u.data[u.pos]
 	if t&mask == tType {

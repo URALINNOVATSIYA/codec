@@ -347,23 +347,15 @@ func TestFuncUnserialization(t *testing.T) {
 }
 
 func TestROUnserialize(t *testing.T) {
-	tStr := tstpkg.Unser()
+	tStr := tstpkg.NewTestStruct().AsInterface()
 	data := Serialize(tStr)
-	unserealized, err := Unserialize(data)
+	unserialized, err := Unserialize(data)
 	if err != nil {
 		panic(err)
 	}
-
-	publicFieldValue := tStr.GetPublicField()
-	expectedPublic := unserealized.(*tstpkg.TstStruct).GetPublicField()
-	if publicFieldValue != expectedPublic {
-		t.Errorf("Public fields are not equal: expected '%s', got '%s'", expectedPublic, publicFieldValue)
+	if !tstpkg.CheckPrivateFunctionality(unserialized) {
+		t.Errorf("Unserializer::decode, values are not equal")
 	}
-	expectedPrivate := unserealized.(*tstpkg.TstStruct).PrivateField()
-	if tStr.PrivateField() != expectedPrivate {
-		t.Errorf("Private fields are not equal: expected '%d', got '%d'", expectedPrivate, tStr.PrivateField())
-	}
-
 }
 
 func TestStructUnserialization(t *testing.T) {
