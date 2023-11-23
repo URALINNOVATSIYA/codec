@@ -5,25 +5,24 @@ import (
 	"unsafe"
 )
 
-type flag uintptr
-
-type flagROTester struct {
-	A int
-	a int
-	int
-}
+const maskFlagRO = ^uintptr(96)
 
 var flagOffset uintptr
-var maskFlagRO flag
-var hasExpectedReflectStruct bool
+var hasFlagField bool
+
+func determineReflectValueFlagOffset() {
+	if field, ok := reflect.TypeOf(reflect.Value{}).FieldByName("flag"); ok {
+		flagOffset = field.Offset
+		hasFlagField = true
+	} else {
+		hasFlagField = false
+	}
+}
 
 func setValue(oldValue reflect.Value, newValue reflect.Value) {
-
-	if hasExpectedReflectStruct {
-		pFlag := (*flag)(unsafe.Pointer(uintptr(unsafe.Pointer(&newValue)) + flagOffset))
-		*pFlag &= maskFlagRO
-		oldValue.Set(newValue)
-	} else {
-		oldValue.Set(newValue)
+	if hasFlagField {
+		flag := (*uintptr)(unsafe.Pointer(uintptr(unsafe.Pointer(&newValue)) + flagOffset))
+		*flag &= maskFlagRO
 	}
+	oldValue.Set(newValue)
 }

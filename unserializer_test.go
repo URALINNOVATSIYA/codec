@@ -3,6 +3,7 @@ package codec
 import (
 	"bytes"
 	"errors"
+	"github.com/URALINNOVATSIYA/codec/tstpkg"
 	"math"
 	"reflect"
 	"strings"
@@ -10,8 +11,6 @@ import (
 	"testing"
 	"text/scanner"
 	"unsafe"
-
-	"github.com/URALINNOVATSIYA/codec/tstpkg"
 )
 
 func TestNilUnserialization(t *testing.T) {
@@ -347,20 +346,7 @@ func TestFuncUnserialization(t *testing.T) {
 	checkUnserializer(items, t)
 }
 
-func TestROUnserialize(t *testing.T) {
-	tStr := tstpkg.NewTestStruct().AsInterface()
-	data := Serialize(tStr)
-	unserialized, err := Unserialize(data)
-	if err != nil {
-		panic(err)
-	}
-	if !tstpkg.CheckPrivateFunctionality(unserialized) {
-		t.Errorf("Unserializer::decode, values are not equal")
-	}
-}
-
 func TestStructUnserialization(t *testing.T) {
-
 	s := &testStruct{
 		F1: "abc",
 		F2: true,
@@ -407,6 +393,17 @@ func TestStructWithPrivateFieldsUnserialization(t *testing.T) {
 	checkUnserializer(items, t)
 	SetStructCodingMode(StructCodingModeDefault)
 	checkUnserializer(items, t)
+}
+
+func TestUnexportedTypeUnserialize(t *testing.T) {
+	expected := tstpkg.Get()
+	data := Serialize(expected)
+	actual, err := Unserialize(data)
+	if err != nil {
+		t.Errorf("Unserializer::decode(%#v) raises error: %q", expected, err)
+	} else if !tstpkg.Check(actual) {
+		t.Errorf("Unserializer::decode(%#v) returns wrong value %#v", expected, actual)
+	}
 }
 
 func TestSerializableUnserialization(t *testing.T) {

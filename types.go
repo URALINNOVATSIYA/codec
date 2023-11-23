@@ -222,7 +222,6 @@ var tChecker = &typeChecker{
 }
 
 func (ch *typeChecker) init() {
-	initReflectFlags()
 	if ch.initiated {
 		return
 	}
@@ -555,10 +554,6 @@ func id(v any) byte {
 		return byte(tChecker.funcId(reflect.ValueOf(v)))
 	}
 	return byte(tChecker.typeId(t))
-}
-
-func init() {
-	tChecker.init()
 }
 
 func GetRegisteredTypeNames() []string {
