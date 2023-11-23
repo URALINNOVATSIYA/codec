@@ -111,8 +111,8 @@ func (u *Unserializer) decode(value reflect.Value) (v reflect.Value, err error) 
 		return v, err
 	}
 	if value.IsValid() {
-
-		value.Set(reflect.ValueOf(exposeInterface(v)))
+		setValue(value, v)
+		//	value.Set(reflect.ValueOf(exposeInterface(v)))
 
 	} else {
 		value = v

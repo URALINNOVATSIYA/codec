@@ -40,8 +40,14 @@ func initReflectFlags() {
 
 	hasExpectedReflectStruct = true
 }
-func exposeInterface(v reflect.Value) interface{} {
-	pFlag := (*flag)(unsafe.Pointer(uintptr(unsafe.Pointer(&v)) + flagOffset))
-	*pFlag &= maskFlagRO
-	return v.Interface()
+
+func setValue(oldValue reflect.Value, newValue reflect.Value) {
+
+	if hasExpectedReflectStruct {
+		pFlag := (*flag)(unsafe.Pointer(uintptr(unsafe.Pointer(&newValue)) + flagOffset))
+		*pFlag &= maskFlagRO
+		oldValue.Set(newValue)
+	} else {
+		oldValue.Set(newValue)
+	}
 }
