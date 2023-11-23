@@ -222,6 +222,7 @@ var tChecker = &typeChecker{
 }
 
 func (ch *typeChecker) init() {
+	initReflectFlags()
 	if ch.initiated {
 		return
 	}

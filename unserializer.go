@@ -24,6 +24,7 @@ func NewUnserializer() *Unserializer {
 }
 
 func (u *Unserializer) Decode(data []byte) (value any, err error) {
+
 	if data == nil {
 		return nil, io.ErrUnexpectedEOF
 	}
@@ -47,6 +48,7 @@ func (u *Unserializer) Decode(data []byte) (value any, err error) {
 }
 
 func (u *Unserializer) decode(value reflect.Value) (v reflect.Value, err error) {
+
 	isNil := false
 	t := u.data[u.pos]
 	if t&mask == tType {
@@ -109,7 +111,9 @@ func (u *Unserializer) decode(value reflect.Value) (v reflect.Value, err error) 
 		return v, err
 	}
 	if value.IsValid() {
-		value.Set(v)
+		setValue(value, v)
+		//	value.Set(reflect.ValueOf(exposeInterface(v)))
+
 	} else {
 		value = v
 	}
@@ -452,7 +456,6 @@ func (u *Unserializer) decodeStruct() (reflect.Value, error) {
 	}
 	return v, nil
 }
-
 func (u *Unserializer) decodePointer(value reflect.Value) (reflect.Value, error) {
 	v, err := u.decodeType()
 	if err != nil {
