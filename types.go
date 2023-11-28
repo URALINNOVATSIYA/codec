@@ -328,7 +328,11 @@ func (ch *typeChecker) funcSignature(f reflect.Value) []byte {
 	if ch.typeAutoReg {
 		return ch.registerFunc(f)
 	}
-	panic(fmt.Sprintf("unregistered function: %s", funcName(f)))
+	fnName := funcName(f)
+	if fnName == "" {
+		fnName = ch.fullTypeName(f.Type())
+	}
+	panic(fmt.Sprintf("unregistered function: %s", fnName))
 }
 
 func (ch *typeChecker) formTypeSignature(t reflect.Type) ([]byte, int) {
