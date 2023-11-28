@@ -255,9 +255,10 @@ func (ch *typeChecker) init() {
 func (ch *typeChecker) registerTypeOf(v any) []byte {
 	t := reflect.TypeOf(v)
 	if t.Kind() == reflect.Func {
+		ch.registerType(t)
 		return ch.registerFunc(reflect.ValueOf(v))
 	}
-	return ch.registerType(reflect.TypeOf(v))
+	return ch.registerType(t)
 }
 
 func (ch *typeChecker) registerType(t reflect.Type) []byte {
