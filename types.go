@@ -165,10 +165,17 @@ var serializableInterfaceType = reflect.TypeOf((*Serializable)(nil)).Elem()
 func isSerializable(v reflect.Value) bool {
 	if v.IsValid() {
 		t := v.Type()
-		if isSimplePointer(t) {
+
+		if t.Kind() == reflect.Ptr {
+			t = t.Elem()
+		}
+
+		if isSimplePointer(v.Type()) {
+
 			return false
 		}
-		return t.Implements(serializableInterfaceType)
+
+		return t.Implements(serializableInterfaceType) || reflect.PtrTo(t).Implements(serializableInterfaceType)
 	}
 	return false
 }
