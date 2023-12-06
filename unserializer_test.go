@@ -3,7 +3,6 @@ package codec
 import (
 	"bytes"
 	"errors"
-	"github.com/URALINNOVATSIYA/codec/tstpkg"
 	"math"
 	"reflect"
 	"strings"
@@ -11,6 +10,8 @@ import (
 	"testing"
 	"text/scanner"
 	"unsafe"
+
+	"github.com/URALINNOVATSIYA/codec/tstpkg"
 )
 
 func TestNilUnserialization(t *testing.T) {
@@ -417,7 +418,17 @@ func TestSerializableUnserialization(t *testing.T) {
 	}
 	checkUnserializer(items, t)
 }
-
+func TestCustomPointerStructUnserialization(t *testing.T) {
+	var items = []any{
+		testCustomPointerStruct{
+			f1: true,
+			f2: "abc",
+			f3: 123,
+		},
+		testCustomUint(123),
+	}
+	checkUnserializer(items, t)
+}
 func TestInterfaceUnserialization(t *testing.T) {
 	var items = []any{
 		testInterface{
