@@ -98,7 +98,12 @@ func (s *Serializer) encodeReferenceValue(cnt uint32) []byte {
 }
 
 func (s *Serializer) encodeSerializable(v reflect.Value) []byte {
-	body := v.MethodByName("Serialize").Call(nil)[0].Interface().([]byte)
+	var body []byte
+
+	ptr := reflect.New(v.Type())
+	ptr.Elem().Set(v)
+	body = ptr.MethodByName("Serialize").Call(nil)[0].Interface().([]byte)
+
 	b := s.encodeTypeSignatureWithLength(v, false, len(body))
 	b = append(b, body...)
 	b[0] |= custom
