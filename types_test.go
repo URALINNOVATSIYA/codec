@@ -77,6 +77,28 @@ func (s testCustomStruct) Unserialize(data []byte) (any, error) {
 	return s, nil
 }
 
+type testCustomPointerStruct struct {
+	f1 bool
+	f2 string
+	f3 uint
+}
+
+func (s *testCustomPointerStruct) Serialize() []byte {
+	b := []any{s.f3, s.f2, s.f1}
+	return Serialize(b)
+}
+
+func (s *testCustomPointerStruct) Unserialize(data []byte) (any, error) {
+	b, err := Unserialize(data)
+	if err != nil {
+		return nil, err
+	}
+	s.f1 = b.([]any)[2].(bool)
+	s.f2 = b.([]any)[1].(string)
+	s.f3 = b.([]any)[0].(uint)
+	return s, nil
+}
+
 type testCustomUint uint
 
 func (s testCustomUint) Serialize() []byte {
