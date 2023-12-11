@@ -1172,7 +1172,27 @@ func TestInterfaceSerialization(t *testing.T) {
 	}
 	checkSerializer(args, t)
 }
+func TestCustomPointerStructSerialization(t *testing.T) {
+	var args = []serializerTestArgs{
 
+		{
+			&testCustomPointerStruct{
+				f1: true,
+				f2: "abc",
+				f3: 123,
+			},
+			[]byte{
+				version, tPointer,
+				tType | custom, id(testCustomPointerStruct{}), tStruct, 16,
+				version, tType, id([]any{}), tList, 3,
+				tInterface, tInt, 123,
+				tInterface, tString, 3, 97, 98, 99,
+				tInterface, tBool | tru,
+			},
+		},
+	}
+	checkSerializer(args, t)
+}
 func TestSerialazableSerialization(t *testing.T) {
 	var args = []serializerTestArgs{
 		{

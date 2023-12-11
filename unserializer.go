@@ -125,10 +125,12 @@ func (u *Unserializer) decode(value reflect.Value) (v reflect.Value, err error) 
 }
 
 func (u *Unserializer) decodeSerializable() (reflect.Value, error) {
+
 	v, l, _, err := u.decodeTypeWithLength(false)
 	if err != nil {
 		return v, err
 	}
+
 	length := int(l)
 	u.pos += length
 	if u.pos > u.size {
@@ -137,12 +139,24 @@ func (u *Unserializer) decodeSerializable() (reflect.Value, error) {
 	if !isSerializable(v) {
 		return v, fmt.Errorf("struct %q does not implement Serializable interface", v.Type().Name())
 	}
-	s := v.MethodByName("Unserialize").Call([]reflect.Value{reflect.ValueOf(u.data[u.pos-length : u.pos])})
+
+	ptr := reflect.New(v.Type())
+
+	s := ptr.MethodByName("Unserialize").Call([]reflect.Value{reflect.ValueOf(u.data[u.pos-length : u.pos])})
+
 	e := s[1].Interface()
-	if err != nil {
+	if e != nil {
 		return v, e.(error)
 	}
+	inter := s[0].Interface()
+	if ptr == reflect.ValueOf(inter) {
+		value := ptr.Elem()
+
+		return value, nil
+	}
+
 	return reflect.ValueOf(s[0].Interface()).Convert(v.Type()), nil
+
 }
 
 func (u *Unserializer) decodeNil() reflect.Value {
