@@ -3,7 +3,6 @@ package codec
 import (
 	"fmt"
 	"reflect"
-	"runtime"
 	"sync"
 	"unsafe"
 )
@@ -160,55 +159,6 @@ const (
 
 const numOfKnownTypes = 19
 
-var serializableInterfaceType = reflect.TypeOf((*Serializable)(nil)).Elem()
-
-func isSerializable(v reflect.Value) bool {
-	if v.IsValid() {
-		t := v.Type()
-
-		if t.Kind() == reflect.Ptr {
-			t = t.Elem()
-		}
-
-		if isSimplePointer(v.Type()) {
-
-			return false
-		}
-
-		return t.Implements(serializableInterfaceType) || reflect.PtrTo(t).Implements(serializableInterfaceType)
-	}
-	return false
-}
-
-func isSimplePointer(t reflect.Type) bool {
-	return t.Kind() == reflect.Pointer && isCommonType(t)
-}
-
-func isCommonType(t reflect.Type) bool {
-	name := t.Name()
-	if name == "" {
-		return true
-	}
-	if name == t.Kind().String() {
-		return true
-	}
-	if t.Kind() == reflect.UnsafePointer && name == "Pointer" {
-		return true
-	}
-	return false
-}
-
-func funcName(f reflect.Value) string {
-	if f.Kind() != reflect.Func {
-		return ""
-	}
-	return runtime.FuncForPC(f.Pointer()).Name()
-}
-
-func changeValue(value reflect.Value, newValue any) {
-	value.Set(reflect.ValueOf(newValue).Convert(value.Type()))
-}
-
 type typeChecker struct {
 	initiated      bool
 	typeAutoReg    bool
@@ -226,6 +176,14 @@ var tChecker = &typeChecker{
 	funcs:          make(map[string]reflect.Value),
 	typeSignatures: make(map[int][]byte, numOfKnownTypes),
 	typeNames:      make(map[string]int),
+}
+
+func id(v any) byte {
+	t := reflect.TypeOf(v)
+	if t.Kind() == reflect.Func {
+		return byte(tChecker.funcId(reflect.ValueOf(v)))
+	}
+	return byte(tChecker.typeId(t))
 }
 
 func (ch *typeChecker) init() {
@@ -560,19 +518,10 @@ func TurnOnTypeAutoRegistration() {
 	tChecker.typeAutoReg = true
 }
 
-func id(v any) byte {
-	t := reflect.TypeOf(v)
-	if t.Kind() == reflect.Func {
-		return byte(tChecker.funcId(reflect.ValueOf(v)))
-	}
-	return byte(tChecker.typeId(t))
-}
-
 func GetRegisteredTypeNames() []string {
-	var typeNames []string
-
-	for typeName := range tChecker.typeNames {
-		typeNames = append(typeNames, typeName)
+	names := make([]string, 0, len(tChecker.typeNames))
+	for name := range tChecker.typeNames {
+		names = append(names, name)
 	}
-	return typeNames
+	return names
 }

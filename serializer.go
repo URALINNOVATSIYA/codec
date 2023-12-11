@@ -98,16 +98,24 @@ func (s *Serializer) encodeReferenceValue(cnt uint32) []byte {
 }
 
 func (s *Serializer) encodeSerializable(v reflect.Value) []byte {
-	var body []byte
-
-	ptr := reflect.New(v.Type())
-	ptr.Elem().Set(v)
-	body = ptr.MethodByName("Serialize").Call(nil)[0].Interface().([]byte)
-
+	var ptrSignature []byte
+	if v.Kind() == reflect.Pointer {
+		var isReference bool
+		if ptrSignature, isReference = s.processPointer(v); isReference {
+			return ptrSignature
+		}
+	}
+	body := v.MethodByName("Serialize").Call(nil)[0].Interface().([]byte)
+	if ptrSignature != nil {
+		v = v.Elem()
+	}
 	b := s.encodeTypeSignatureWithLength(v, false, len(body))
 	b = append(b, body...)
 	b[0] |= custom
-	return b
+	if ptrSignature == nil {
+		return b
+	}
+	return append(ptrSignature, b...)
 }
 
 func (s *Serializer) encodeNil(v reflect.Value) []byte {
@@ -230,6 +238,14 @@ func (s *Serializer) encodeUnsafePointer(v reflect.Value) []byte {
 }
 
 func (s *Serializer) encodePointer(v reflect.Value) []byte {
+	signature, isReference := s.processPointer(v)
+	if isReference {
+		return signature
+	}
+	return append(signature, s.encode(v.Elem())...)
+}
+
+func (s *Serializer) processPointer(v reflect.Value) ([]byte, bool) {
 	_, b := toMinBytes(uint64(v.Pointer()))
 	el := v.Elem()
 	if el.IsValid() {
@@ -238,9 +254,9 @@ func (s *Serializer) encodePointer(v reflect.Value) []byte {
 	}
 	cnt, ok := s.refs[*(*string)(unsafe.Pointer(&b))]
 	if ok {
-		return s.encodeReference(cnt)
+		return s.encodeReference(cnt), true
 	}
-	return append(tChecker.typeSignatureOf(v), s.encode(v.Elem())...)
+	return tChecker.typeSignatureOf(v), false
 }
 
 func (s *Serializer) encodeReference(cnt uint32) []byte {

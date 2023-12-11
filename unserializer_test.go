@@ -409,26 +409,31 @@ func TestUnexportedTypeUnserialize(t *testing.T) {
 
 func TestSerializableUnserialization(t *testing.T) {
 	var items = []any{
+		testCustomUint(123),
 		testCustomStruct{
 			f1: true,
 			f2: "abc",
 			f3: 123,
 		},
-		testCustomUint(123),
-	}
-	checkUnserializer(items, t)
-}
-func TestCustomPointerStructUnserialization(t *testing.T) {
-	var items = []any{
+		&testCustomStruct{
+			f1: true,
+			f2: "abc",
+			f3: 123,
+		},
+		&testCustomPointerStruct{
+			f1: true,
+			f2: "abc",
+			f3: 123,
+		},
 		testCustomPointerStruct{
 			f1: true,
 			f2: "abc",
 			f3: 123,
 		},
-		testCustomUint(123),
 	}
 	checkUnserializer(items, t)
 }
+
 func TestInterfaceUnserialization(t *testing.T) {
 	var items = []any{
 		testInterface{
