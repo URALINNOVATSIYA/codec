@@ -557,8 +557,8 @@ func TestMixedReferenceUnserialization(t *testing.T) {
 
 func checkUnserializer(values []any, t *testing.T) {
 	registerTestTypes()
-	serializer := NewSerializer()
-	unserializer := NewUnserializer()
+	serializer := NewSerializer(GetStructCodingMode())
+	unserializer := NewUnserializer(GetStructCodingMode())
 	for _, expected := range values {
 		data := serializer.Encode(expected)
 		actual, err := unserializer.Decode(data)

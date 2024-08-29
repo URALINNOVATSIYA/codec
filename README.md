@@ -24,7 +24,7 @@ or use type Serializer:
 ```go
 value := ... // a value to serialize
 
-serializer := NewSerializer()
+serializer := NewSerializer(GetStructCodingMode())
 data := serializer.Encode(value)
 ```
 
@@ -41,7 +41,7 @@ or
 ```go
 var data []byte = ... // serialized value
 
-unserializer := NewUnserializer()
+unserializer := NewUnserializer(GetStructCodingMode())
 value, err := unserializer.Decode(data)
 ```
 

@@ -9,12 +9,13 @@ import (
 )
 
 type Serializer struct {
-	refs map[string]uint32
-	cnt  uint32
+	refs             map[string]uint32
+	cnt              uint32
+	structCodingMode int
 }
 
-func NewSerializer() *Serializer {
-	return &Serializer{}
+func NewSerializer(structCodingMode int) *Serializer {
+	return &Serializer{structCodingMode: structCodingMode}
 }
 
 func (s *Serializer) Encode(value any) []byte {
@@ -309,7 +310,7 @@ func (s *Serializer) encodeTypeSignatureWithLength(v reflect.Value, canBeNil boo
 func (s *Serializer) encodeStruct(v reflect.Value) []byte {
 	var f []byte
 	var i, fieldCount int
-	switch GetStructCodingMode() {
+	switch s.structCodingMode {
 	case StructCodingModeIndex:
 		for i, fieldCount = 0, v.NumField(); i < fieldCount; i++ {
 			f = append(f, s.encodeInt(reflect.ValueOf(uint(i)))...)
@@ -365,6 +366,12 @@ func (s *Serializer) typeSignatureOf(v reflect.Value, canBeNil bool) []byte {
 	return b
 }
 
-func Serialize(value any) []byte {
-	return NewSerializer().Encode(value)
+func Serialize(value any, options ...int) []byte {
+	var structCodingMode int
+	if len(options) > 0 {
+		structCodingMode = options[0]
+	} else {
+		structCodingMode = GetStructCodingMode()
+	}
+	return NewSerializer(structCodingMode).Encode(value)
 }

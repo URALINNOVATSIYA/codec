@@ -1360,7 +1360,7 @@ func TestReferenceSerialization(t *testing.T) {
 
 func checkSerializer(args []serializerTestArgs, t *testing.T) {
 	registerTestTypes()
-	serializer := NewSerializer()
+	serializer := NewSerializer(GetStructCodingMode())
 	for _, arg := range args {
 		data := serializer.Encode(arg.value)
 		if !bytes.Equal(data, arg.data) {

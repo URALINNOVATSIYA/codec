@@ -11,16 +11,17 @@ import (
 )
 
 type Unserializer struct {
-	refs map[uint32]reflect.Value
-	rels map[uint32]uint32
-	cnt  uint32
-	data []byte
-	pos  int
-	size int
+	refs             map[uint32]reflect.Value
+	rels             map[uint32]uint32
+	cnt              uint32
+	data             []byte
+	pos              int
+	size             int
+	structCodingMode int
 }
 
-func NewUnserializer() *Unserializer {
-	return &Unserializer{}
+func NewUnserializer(structCodingMode int) *Unserializer {
+	return &Unserializer{structCodingMode: structCodingMode}
 }
 
 func (u *Unserializer) Decode(data []byte) (value any, err error) {
@@ -415,7 +416,7 @@ func (u *Unserializer) decodeStruct() (reflect.Value, error) {
 	u.refs[u.cnt] = v
 	u.cnt++
 	length := int(l)
-	switch GetStructCodingMode() {
+	switch u.structCodingMode {
 	case StructCodingModeIndex:
 		var field, fieldIndex reflect.Value
 		for i := 0; i < length; i++ {
@@ -663,6 +664,12 @@ func (u *Unserializer) readTypeSignature() ([]byte, error) {
 	}
 }
 
-func Unserialize(bytes []byte) (any, error) {
-	return NewUnserializer().Decode(bytes)
+func Unserialize(bytes []byte, options ...int) (any, error) {
+	var structCodingMode int
+	if len(options) > 0 {
+		structCodingMode = options[0]
+	} else {
+		structCodingMode = GetStructCodingMode()
+	}
+	return NewUnserializer(structCodingMode).Decode(bytes)
 }
