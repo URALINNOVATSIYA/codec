@@ -937,13 +937,14 @@ func TestStructDefaultModeSerialization(t *testing.T) {
 			[]byte{
 				version,
 				tPointer,                            // *testStruct
-				tType, id(testStruct{}), tStruct, 6, // struct header
+				tType, id(testStruct{}), tStruct, 7, // struct header
 				tString, 3, 97, 98, 99, // "abc"
 				tBool | tru, // true
 				tRef, 1,     // self ref
 				tInterface, tRef, 2, // *s.F1
 				tInt | signed | 0b0001, 2, 130, // 321
-				tString, 1, 35,
+				tString, 1, 35, // #
+				tPointer | null, tType, id(testStruct{}), tStruct, // s.f7 = *nil
 			},
 		},
 		{
@@ -994,13 +995,14 @@ func TestStructIndexModeSerialization(t *testing.T) {
 			[]byte{
 				version,
 				tPointer,                            // *testStruct
-				tType, id(testStruct{}), tStruct, 6, // struct header
+				tType, id(testStruct{}), tStruct, 7, // struct header
 				tInt, 0, tString, 3, 97, 98, 99, // "abc"
 				tInt, 1, tBool | tru, // true
 				tInt, 2, tRef, 1, // self ref
 				tInt, 3, tInterface, tRef, 2, // *s.F1
 				tInt, 4, tInt | signed | 0b0001, 2, 130, // 321
-				tInt, 5, tString, 1, 35,
+				tInt, 5, tString, 1, 35, // #
+				tInt, 6, tPointer | null, tType, id(testStruct{}), tStruct, // t.f7 = *nil
 			},
 		},
 		{
@@ -1050,13 +1052,14 @@ func TestStructNameModeSerialization(t *testing.T) {
 			[]byte{
 				version,
 				tPointer,                            // *testStruct
-				tType, id(testStruct{}), tStruct, 6, // struct header
-				112, 2, 70, 49, tString, 3, 97, 98, 99, // "abc"
-				112, 2, 70, 50, tBool | tru, // true
-				112, 2, 70, 51, tRef, 1, // self ref
-				112, 2, 70, 52, tInterface, tRef, 2, // *s.F1
-				112, 2, 102, 53, tInt | signed | 0b0001, 2, 130, // 321
-				112, 2, 102, 54, tString, 1, 35,
+				tType, id(testStruct{}), tStruct, 7, // struct header
+				tString, 2, 70, 49, tString, 3, 97, 98, 99, // "abc"
+				tString, 2, 70, 50, tBool | tru, // true
+				tString, 2, 70, 51, tRef, 1, // self ref
+				tString, 2, 70, 52, tInterface, tRef, 2, // *s.F1
+				tString, 2, 102, 53, tInt | signed | 0b0001, 2, 130, // 321
+				tString, 2, 102, 54, tString, 1, 35, // #
+				tString, 2, 102, 55, tPointer | null, tType, id(testStruct{}), tStruct, // t.f7 = *nil
 			},
 		},
 		{
@@ -1165,8 +1168,8 @@ func TestInterfaceSerialization(t *testing.T) {
 			[]byte{
 				version, tType, id(v), tStruct, 3, // struct header
 				tType | null, byte(ioReaderId), tInterface, // io.Reader nil interface
-				tPointer, tNil, // nil pointer to io.Reader interface
-				tPointer, tNil, // nil pointer to testStruct
+				tPointer | null, tType, byte(ioReaderId), tInterface, // nil pointer to io.Reader interface
+				tPointer | null, tType, id(testStruct{}), tStruct, // nil pointer to testStruct
 			},
 		},
 	}
@@ -1242,6 +1245,30 @@ func TestSerializableSerialization(t *testing.T) {
 				tInt, 123,
 			},
 		},
+		{
+			testCustomNestedStruct{
+				data: "d1",
+				ptr: &testCustomNestedStruct{
+					data: "d2",
+					ptr: &testCustomNestedStruct{
+						data: "d3",
+						ptr:  nil,
+					},
+				},
+			},
+			[]byte{
+				version,
+				tType, id(testCustomNestedStruct{}), tStruct, 2,
+				tString, 2, 100, 49,
+				tPointer, tType | custom, id(testCustomNestedStruct{}), tStruct, 31,
+				version, tType, id([]any{}), tList, 2,
+				tInterface, tString, 2, 100, 50,
+				tInterface, tPointer, tType | custom, id(testCustomNestedStruct{}), tStruct, 15,
+				version, tType, id([]any{}), tList, 2,
+				tInterface, tString, 2, 100, 51,
+				tInterface, tPointer | null, tType, id(testCustomNestedStruct{}), tStruct,
+			},
+		},
 	}
 	checkSerializer(args, t)
 }
@@ -1251,7 +1278,7 @@ func TestPointerSerialization(t *testing.T) {
 	// *Nil
 	args[0] = serializerTestArgs{
 		(*any)(nil),
-		[]byte{version, tPointer, tNil},
+		[]byte{version, tPointer | null, tInterface},
 	}
 	// *Bool
 	v1 := false
@@ -1308,19 +1335,18 @@ func TestPointerSerialization(t *testing.T) {
 		},
 	}
 	args[10] = serializerTestArgs{
-		testRecPtr(nil),
+		testRecPtr(testRecPtr(nil)),
 		[]byte{
 			version,
-			tType, id(testRecPtr(nil)),
-			tPointer,
-			tNil,
+			tType | null, id(testRecPtr(nil)),
+			tPointer, tType, id(testRecPtr(nil)), tPointer,
 		},
 	}
 	checkSerializer(args, t)
 }
 
 func TestReferenceSerialization(t *testing.T) {
-	args := make([]serializerTestArgs, 3, 3)
+	args := make([]serializerTestArgs, 3)
 
 	var v0 any
 	v0 = &v0

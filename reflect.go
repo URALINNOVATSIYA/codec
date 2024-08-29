@@ -22,16 +22,20 @@ func determineReflectValueFlagOffset() {
 	}
 }
 
-func setValue(oldValue reflect.Value, newValue reflect.Value) {
+func makeExported(v reflect.Value) reflect.Value {
 	if hasFlagField {
-		flag := (*uintptr)(unsafe.Pointer(uintptr(unsafe.Pointer(&newValue)) + flagOffset))
+		flag := (*uintptr)(unsafe.Pointer(uintptr(unsafe.Pointer(&v)) + flagOffset))
 		*flag &= maskFlagRO
 	}
-	oldValue.Set(newValue)
+	return v
 }
 
-func changeValue(value reflect.Value, newValue any) {
-	value.Set(reflect.ValueOf(newValue).Convert(value.Type()))
+func setValue(oldValue reflect.Value, newValue reflect.Value) {
+	oldValue.Set(makeExported(newValue))
+}
+
+func changeValue(oldValue reflect.Value, newValue any) {
+	oldValue.Set(reflect.ValueOf(newValue).Convert(oldValue.Type()))
 }
 
 func isSerializable(v reflect.Value) bool {
@@ -47,6 +51,18 @@ func isSerializable(v reflect.Value) bool {
 		return t.Implements(serializableInterfaceType)
 	}
 	return false
+}
+
+func isNil(v reflect.Value) bool {
+	switch v.Kind() {
+	case reflect.Interface,
+		reflect.Map, reflect.Slice,
+		reflect.Pointer, reflect.UnsafePointer,
+		reflect.Chan, reflect.Func:
+		return v.IsNil()
+	default:
+		return false
+	}
 }
 
 func isPointer(t reflect.Type) bool {

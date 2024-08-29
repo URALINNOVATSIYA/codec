@@ -30,7 +30,7 @@ func minByteSizeWithMeta(v uint64, metaSize int) int {
 // and its byte representation in big endian
 func toMinBytes(v uint64) (int, []byte) {
 	size := minByteSize(v)
-	bytes := make([]byte, size, size)
+	bytes := make([]byte, size)
 	for i, j := 0, size; j > 0; i++ {
 		j--
 		bytes[i] = byte(v >> (j << 3))
@@ -46,7 +46,7 @@ func asMinBytes(v uint64) []byte {
 
 // toBytes returns the v's byte representation of the given size in big endian
 func toBytes(v uint64, size int) []byte {
-	bytes := make([]byte, size, size)
+	bytes := make([]byte, size)
 	for i := 0; size > 0; i++ {
 		size--
 		bytes[i] = byte(v >> (size << 3))

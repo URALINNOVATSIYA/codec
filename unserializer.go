@@ -49,7 +49,6 @@ func (u *Unserializer) Decode(data []byte) (value any, err error) {
 }
 
 func (u *Unserializer) decode(value reflect.Value) (v reflect.Value, err error) {
-
 	isNil := false
 	t := u.data[u.pos]
 	if t&mask == tType {
@@ -97,7 +96,7 @@ func (u *Unserializer) decode(value reflect.Value) (v reflect.Value, err error) 
 		v, err = u.decodeStruct()
 		proceed = false
 	case tPointer:
-		v, err = u.decodePointer(value)
+		v, err = u.decodePointer(value, isNil || t&null != 0)
 		proceed = false
 	case tRef:
 		v, err = u.decodeReference(value)
@@ -148,7 +147,7 @@ func (u *Unserializer) decodeSerializable() (reflect.Value, error) {
 	}
 	s := obj.MethodByName("Unserialize").Call([]reflect.Value{reflect.ValueOf(u.data[u.pos-length : u.pos])})
 	e := s[1].Interface()
-	if err != nil {
+	if e != nil {
 		return v, e.(error)
 	}
 	obj = reflect.ValueOf(s[0].Interface())
@@ -408,6 +407,7 @@ func (u *Unserializer) decodeMap(isNil bool) (reflect.Value, error) {
 	}
 	return mp, nil
 }
+
 func (u *Unserializer) decodeStruct() (reflect.Value, error) {
 	v, l, _, err := u.decodeTypeWithLength(false)
 	if err != nil {
@@ -467,7 +467,8 @@ func (u *Unserializer) decodeStruct() (reflect.Value, error) {
 	}
 	return v, nil
 }
-func (u *Unserializer) decodePointer(value reflect.Value) (reflect.Value, error) {
+
+func (u *Unserializer) decodePointer(value reflect.Value, isNil bool) (reflect.Value, error) {
 	v, err := u.decodeType()
 	if err != nil {
 		return v, err
@@ -476,18 +477,24 @@ func (u *Unserializer) decodePointer(value reflect.Value) (reflect.Value, error)
 	u.refs[cnt] = v
 	u.cnt++
 	u.rels[u.cnt] = cnt
-	el, err := u.decode(reflect.Value{})
-	if err != nil {
+	var el reflect.Value
+	if isNil {
+		if !v.IsValid() {
+			if el, err = u.decodeType(); err != nil {
+				return v, err
+			}
+			v = reflect.Zero(u.pointerTo(el).Type())
+		}
+	} else if el, err = u.decode(reflect.Value{}); err != nil {
 		return v, err
-	}
-	if v.IsValid() {
+	} else if v.IsValid() {
 		if el.IsValid() {
 			changeValue(v, u.pointerTo(el).Interface())
 		}
 	} else if el.IsValid() {
 		v = u.pointerTo(el)
 	} else if value.IsValid() {
-		if value.Kind() == reflect.Interface {
+		if value.Kind() == reflect.Interface && !value.IsNil() {
 			v = u.pointerTo(reflect.Zero(value.Type().Elem()))
 		} else {
 			v = reflect.Zero(value.Type())

@@ -106,7 +106,10 @@ func (s *Serializer) encodeSerializable(v reflect.Value) []byte {
 			return ptrSignature
 		}
 	}
-	body := v.MethodByName("Serialize").Call(nil)[0].Interface().([]byte)
+	if isNil(v) {
+		return append(ptrSignature, tChecker.typeSignature(v.Type().Elem())...)
+	}
+	body := makeExported(v.MethodByName("Serialize")).Call(nil)[0].Interface().([]byte)
 	if ptrSignature != nil {
 		v = v.Elem()
 	}
@@ -243,6 +246,10 @@ func (s *Serializer) encodePointer(v reflect.Value) []byte {
 	if isReference {
 		return signature
 	}
+	el := v.Elem()
+	if !el.IsValid() {
+		return append(signature, tChecker.typeSignature(v.Type().Elem())...)
+	}
 	return append(signature, s.encode(v.Elem())...)
 }
 
@@ -257,7 +264,7 @@ func (s *Serializer) processPointer(v reflect.Value) ([]byte, bool) {
 	if ok {
 		return s.encodeReference(cnt), true
 	}
-	return tChecker.typeSignatureOf(v), false
+	return s.typeSignatureOf(v, true), false
 }
 
 func (s *Serializer) encodeReference(cnt uint32) []byte {
@@ -290,20 +297,6 @@ func (s *Serializer) encodeMap(v reflect.Value) []byte {
 		b = append(b, s.encode(iter.Key())...)
 		b = append(b, s.encode(iter.Value())...)
 	}
-	return b
-}
-
-func (s *Serializer) encodeTypeSignatureWithLength(v reflect.Value, canBeNil bool, length int) []byte {
-	typeSignature := tChecker.typeSignatureOf(v)
-	if canBeNil && v.IsNil() {
-		typeSignature[0] |= null
-		return typeSignature
-	}
-	byteSize, sizeBytes := toMinBytes(uint64(length))
-	b := make([]byte, 0, length+byteSize+len(typeSignature))
-	b = append(b, typeSignature...)
-	b = append(b, sizeBytes...)
-	b[len(typeSignature)-1] |= byte(byteSize - 1)
 	return b
 }
 
@@ -358,12 +351,26 @@ func (s *Serializer) encodeInterface(v reflect.Value) []byte {
 	return append(b, s.encode(v.Elem())...)
 }
 
-func (s *Serializer) typeSignatureOf(v reflect.Value, canBeNil bool) []byte {
-	b := tChecker.typeSignatureOf(v)
+func (s *Serializer) encodeTypeSignatureWithLength(v reflect.Value, canBeNil bool, length int) []byte {
+	typeSignature := tChecker.typeSignatureOf(v)
 	if canBeNil && v.IsNil() {
-		b[0] |= null
+		typeSignature[0] |= null
+		return typeSignature
 	}
+	byteSize, sizeBytes := toMinBytes(uint64(length))
+	b := make([]byte, 0, length+byteSize+len(typeSignature))
+	b = append(b, typeSignature...)
+	b = append(b, sizeBytes...)
+	b[len(typeSignature)-1] |= byte(byteSize - 1)
 	return b
+}
+
+func (s *Serializer) typeSignatureOf(v reflect.Value, canBeNil bool) []byte {
+	typeSignature := tChecker.typeSignatureOf(v)
+	if canBeNil && v.IsNil() {
+		typeSignature[0] |= null
+	}
+	return typeSignature
 }
 
 func Serialize(value any, options ...int) []byte {

@@ -359,7 +359,6 @@ func TestStructUnserialization(t *testing.T) {
 	s.F3 = s
 	s.F4 = &s.F1
 	var items = []any{
-
 		s,
 		struct {
 			f1 bool
@@ -430,6 +429,16 @@ func TestSerializableUnserialization(t *testing.T) {
 			f2: "abc",
 			f3: 123,
 		},
+		testCustomNestedStruct{
+			data: "d1",
+			ptr: &testCustomNestedStruct{
+				data: "d2",
+				ptr: &testCustomNestedStruct{
+					data: "d3",
+					ptr:  nil,
+				},
+			},
+		},
 	}
 	checkUnserializer(items, t)
 }
@@ -444,7 +453,7 @@ func TestInterfaceUnserialization(t *testing.T) {
 }
 
 func TestPointerUnserialization(t *testing.T) {
-	values := make([]any, 8)
+	values := make([]any, 9)
 	// *Nil
 	values[0] = (*any)(nil)
 	// *Bool
@@ -466,6 +475,9 @@ func TestPointerUnserialization(t *testing.T) {
 	values[6] = v6
 	// testRectPtr
 	values[7] = testRecPtr(nil)
+	// nil ptr
+	var s *string
+	values[8] = s
 	checkUnserializer(values, t)
 }
 

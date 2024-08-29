@@ -47,6 +47,7 @@ type (
 		F4 any
 		f5 int
 		f6 string
+		f7 *testStruct
 	}
 	testInterface struct {
 		src io.Reader
@@ -96,6 +97,29 @@ func (s *testCustomPointerStruct) Unserialize(data []byte) (any, error) {
 	s.f1 = b.([]any)[2].(bool)
 	s.f2 = b.([]any)[1].(string)
 	s.f3 = b.([]any)[0].(uint)
+	return s, nil
+}
+
+type testCustomNestedStruct struct {
+	data string
+	ptr  *testCustomNestedStruct
+}
+
+func (s *testCustomNestedStruct) Serialize() []byte {
+	b := []any{s.data, s.ptr}
+	return Serialize(b)
+}
+
+func (s *testCustomNestedStruct) Unserialize(data []byte) (any, error) {
+	b, err := Unserialize(data)
+	if err != nil {
+		return nil, err
+	}
+	fields := b.([]any)
+	s.data = fields[0].(string)
+	if fields[1] != nil {
+		s.ptr = fields[1].(*testCustomNestedStruct)
+	}
 	return s, nil
 }
 
