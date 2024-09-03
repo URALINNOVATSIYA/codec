@@ -1,6 +1,9 @@
 package codec
 
+var defaultTypeReg *TypeRegistry
+
 func init() {
-	tChecker.init()
 	determineReflectValueFlagOffset()
+	defaultTypeReg = NewTypeRegistry(true)
+	defaultTypeReg.RegisterBaseTypes()
 }

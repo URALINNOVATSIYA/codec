@@ -3,20 +3,20 @@ package codec
 import "fmt"
 
 const (
-	StructCodingModeDefault = 0
-	StructCodingModeIndex   = 1
-	StructCodingModeName    = 2
+	StructCodingModeDefault byte = 0
+	StructCodingModeIndex   byte = 1
+	StructCodingModeName    byte = 2
 )
 
-var structCodingMode int
+var structCodingMode byte
 
-func SetStructCodingMode(mode int) {
+func SetDefaultStructCodingMode(mode byte) {
 	if mode < StructCodingModeDefault && mode > StructCodingModeName {
-		panic(fmt.Sprintf("Invalid structure coding mode %d", mode))
+		panic(fmt.Errorf("Invalid structure coding mode %d", mode))
 	}
 	structCodingMode = mode
 }
 
-func GetStructCodingMode() int {
+func GetDefaultStructCodingMode() byte {
 	return structCodingMode
 }

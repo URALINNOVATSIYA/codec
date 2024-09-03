@@ -1,6 +1,6 @@
 package codec
 
-import (
+/*import (
 	"errors"
 	"fmt"
 	"io"
@@ -25,7 +25,6 @@ func NewUnserializer(structCodingMode int) *Unserializer {
 }
 
 func (u *Unserializer) Decode(data []byte) (value any, err error) {
-
 	if data == nil {
 		return nil, io.ErrUnexpectedEOF
 	}
@@ -577,6 +576,7 @@ func (u *Unserializer) decodeInterface(isNil bool) (reflect.Value, error) {
 		return v, err
 	}
 	u.refs[u.cnt] = v
+	//u.cnt++
 	if isNil {
 		return v, nil
 	}
@@ -680,3 +680,4 @@ func Unserialize(bytes []byte, options ...int) (any, error) {
 	}
 	return NewUnserializer(structCodingMode).Decode(bytes)
 }
+*/

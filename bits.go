@@ -26,9 +26,9 @@ func minByteSizeWithMeta(v uint64, metaSize int) int {
 	return size>>3 + 1
 }
 
-// toMinBytes returns the minimum number of bytes required to represent v
+// minBytes returns the minimum number of bytes required to represent v
 // and its byte representation in big endian
-func toMinBytes(v uint64) (int, []byte) {
+func minBytes(v uint64) (int, []byte) {
 	size := minByteSize(v)
 	bytes := make([]byte, size)
 	for i, j := 0, size; j > 0; i++ {
@@ -38,14 +38,14 @@ func toMinBytes(v uint64) (int, []byte) {
 	return size, bytes
 }
 
-// toMinBytes returns the minimum number of bytes required to represent v
-func asMinBytes(v uint64) []byte {
-	_, b := toMinBytes(v)
+// toBytes returns the minimum byte representation of v in big endian
+func asBytes(v uint64) []byte {
+	_, b := minBytes(v)
 	return b
 }
 
-// toBytes returns the v's byte representation of the given size in big endian
-func toBytes(v uint64, size int) []byte {
+// asBytesOfSize returns the v's byte representation of the given size in big endian
+func asBytesOfSize(v uint64, size int) []byte {
 	bytes := make([]byte, size)
 	for i := 0; size > 0; i++ {
 		size--
@@ -54,6 +54,8 @@ func toBytes(v uint64, size int) []byte {
 	return bytes
 }
 
+// toUint adjusts int64 value to store it as uint64 so that the sign bit becomes the first one
+// and other sign bits are cleared
 func toUint(i int64) uint64 {
 	if i >= 0 {
 		return uint64(i) << 1

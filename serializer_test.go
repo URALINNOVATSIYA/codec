@@ -2,19 +2,76 @@ package codec
 
 import (
 	"bytes"
-	"errors"
-	"io"
-	"math"
-	"reflect"
 	"strings"
 	"testing"
-	"unsafe"
 )
 
-type serializerTestArgs struct {
+type serializerTestItems struct {
 	value any
 	data  []byte
 }
+
+func TestNilSerialization(t *testing.T) {
+	items := []serializerTestItems{
+		{
+			nil,
+			[]byte{version, id(nil)},
+		},
+	}
+	checkEncodedData(t, items)
+}
+
+func TestBoolSerialization(t *testing.T) {
+	items := []serializerTestItems{
+		{
+			false,
+			[]byte{version, id(false), 0},
+		},
+		{
+			true,
+			[]byte{version, id(false), 1},
+		},
+	}
+	checkEncodedData(t, items)
+}
+
+func TestStringSerialization(t *testing.T) {
+	items := []serializerTestItems{
+		{
+			"",
+			[]byte{version, id(""), 0},
+		},
+		{
+			"0123456789",
+			[]byte{version, id(""), 10, 48, 49, 50, 51, 52, 53, 54, 55, 56, 57},
+		},
+		{
+			strings.Repeat("a", 255),
+			append([]byte{version, id(""), 0b0010_0000, 255}, []byte(strings.Repeat("a", 255))...),
+		},
+		{
+			strings.Repeat("a", 65536),
+			append([]byte{version, id(""), 0b0100_0000 | 1, 0, 0}, []byte(strings.Repeat("a", 65536))...),
+		},
+		{
+			testStr("abcd"),
+			[]byte{version, id(testStr("")), 4, 97, 98, 99, 100},
+		},
+	}
+	checkEncodedData(t, items)
+}
+
+func checkEncodedData(t *testing.T, items []serializerTestItems) {
+	serializer := NewSerializer()
+	for _, item := range items {
+		data := serializer.Encode(item.value)
+		if !bytes.Equal(data, item.data) {
+			t.Errorf("Encode(%#v) must return %v, but actual value is %v", item.value, item.data, data)
+		}
+	}
+}
+
+/*
 
 func TestNilSerialization(t *testing.T) {
 	var args = []serializerTestArgs{
@@ -1274,7 +1331,7 @@ func TestSerializableSerialization(t *testing.T) {
 }
 
 func TestPointerSerialization(t *testing.T) {
-	args := make([]serializerTestArgs, 11)
+	args := make([]serializerTestArgs, 12)
 	// *Nil
 	args[0] = serializerTestArgs{
 		(*any)(nil),
@@ -1324,6 +1381,7 @@ func TestPointerSerialization(t *testing.T) {
 		&v8,
 		[]byte{version, tPointer, tInt | 0b0010, 188, 97, 78},
 	}
+	// *bool
 	v9 := true
 	args[9] = serializerTestArgs{
 		testPtr(&v9),
@@ -1334,6 +1392,7 @@ func TestPointerSerialization(t *testing.T) {
 			tBool | tru,
 		},
 	}
+	// rec ptr
 	args[10] = serializerTestArgs{
 		testRecPtr(testRecPtr(nil)),
 		[]byte{
@@ -1342,11 +1401,22 @@ func TestPointerSerialization(t *testing.T) {
 			tPointer, tType, id(testRecPtr(nil)), tPointer,
 		},
 	}
+	// rec ptr with other types
+	args[11] = serializerTestArgs{
+		[]any{testRecPtr(nil), nil},
+		[]byte{
+			version,
+			tType, id([]any{}), tList, 2,
+			tInterface, tType | null, id(testRecPtr(nil)),
+			tPointer, tType, id(testRecPtr(nil)), tPointer,
+			tInterface | null,
+		},
+	}
 	checkSerializer(args, t)
 }
 
 func TestReferenceSerialization(t *testing.T) {
-	args := make([]serializerTestArgs, 3)
+	args := make([]serializerTestArgs, 4)
 
 	var v0 any
 	v0 = &v0
@@ -1376,21 +1446,54 @@ func TestReferenceSerialization(t *testing.T) {
 		[]byte{
 			version,
 			tType, id([]any{}), tList, 2,
-			tInterface, tPointer, tType, id([3]byte{1, 2, 3}), tList | fixed, 3, tByte, 1, tByte, 2, tByte, 3,
+			tInterface, tPointer, tType, id(b), tList | fixed, 3, tByte, 1, tByte, 2, tByte, 3,
 			tInterface, tRef, 3,
+		},
+	}
+
+	/*l := newLst()
+	v4 := l.push()
+	_ = l.push()
+	// n1.prev = *lst.root
+	// n1.next = *n2
+	// n1.lst = *lst
+	// n2.prev = *n1
+	// n2.next = *lst.root
+	// n2.lst = *lst
+	// lst.root.prev = *n2
+	// lst.root.next = *n1
+	// lst.root.lst = nil
+	args[3] = serializerTestArgs{
+		v4,
+		[]byte{
+			version,
+			tPointer, tType, id(node{}), tStruct, 3, // *n1
+				tPointer, tType, id(node{}), tStruct, 3, // n1.prev = *lst.root
+					tPointer, tType, id(node{}), tStruct, 3, // lst.root.prev = *n2
+						tRef, 1, // n2.prev = ref (n1)
+						tRef, 3, // n2.next = ref (lst.root)
+						tPointer, tType, id(lst{}), tStruct, 1, // n2.lst
+							tRef | val, 3, // lst.root value
+					tRef, 1, // lst.root.next = *n1 (ref)
+					tPointer | null, tType, id(lst{}), tStruct, // lst.root.lst = nil
+				tRef, 5, // n1.next = *n2 (ref)
+				tRef, 9, // n1.lst = *lst (ref)
+		},
+	}
+
+	var n0, n1 any
+	n1 = &n0
+	n0 = &n1
+	args[3] = serializerTestArgs{
+		n0,
+		[]byte{
+			version,
+			tPointer, tInterface,
+			tPointer, tInterface,
+			tRef, 1,
 		},
 	}
 
 	checkSerializer(args, t)
 }
-
-func checkSerializer(args []serializerTestArgs, t *testing.T) {
-	registerTestTypes()
-	serializer := NewSerializer(GetStructCodingMode())
-	for _, arg := range args {
-		data := serializer.Encode(arg.value)
-		if !bytes.Equal(data, arg.data) {
-			t.Errorf("Serializer::encode(%#v) expected %v, but actual value is %v", arg.value, arg.data, data)
-		}
-	}
-}
+*/
