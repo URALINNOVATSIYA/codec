@@ -11,17 +11,17 @@ type serializerTestItems struct {
 	data  []byte
 }
 
-func TestNilSerialization(t *testing.T) {
+func TestSerialization_Nil(t *testing.T) {
 	items := []serializerTestItems{
 		{
 			nil,
-			[]byte{version, id(nil)},
+			[]byte{version, id(nil), 0},
 		},
 	}
 	checkEncodedData(t, items)
 }
 
-func TestBoolSerialization(t *testing.T) {
+func TestSerialization_Bool(t *testing.T) {
 	items := []serializerTestItems{
 		{
 			false,
@@ -31,32 +31,318 @@ func TestBoolSerialization(t *testing.T) {
 			true,
 			[]byte{version, id(false), 1},
 		},
+		{
+			testBool(false),
+			[]byte{version, id(testBool(false)), 0},
+		},
+		{
+			testBool(true),
+			[]byte{version, id(testBool(true)), 1},
+		},
 	}
 	checkEncodedData(t, items)
 }
 
-func TestStringSerialization(t *testing.T) {
+func TestSerialization_String(t *testing.T) {
+	stringId := id("")
 	items := []serializerTestItems{
 		{
 			"",
-			[]byte{version, id(""), 0},
+			[]byte{version, stringId, 0b0001_0000},
 		},
 		{
 			"0123456789",
-			[]byte{version, id(""), 10, 48, 49, 50, 51, 52, 53, 54, 55, 56, 57},
+			[]byte{version, stringId, 0b0001_0000 | 10, 48, 49, 50, 51, 52, 53, 54, 55, 56, 57},
 		},
 		{
 			strings.Repeat("a", 255),
-			append([]byte{version, id(""), 0b0010_0000, 255}, []byte(strings.Repeat("a", 255))...),
+			append([]byte{version, stringId, 0b0010_0000, 255}, []byte(strings.Repeat("a", 255))...),
 		},
 		{
 			strings.Repeat("a", 65536),
-			append([]byte{version, id(""), 0b0100_0000 | 1, 0, 0}, []byte(strings.Repeat("a", 65536))...),
+			append([]byte{version, stringId, 0b0011_0000 | 1, 0, 0}, []byte(strings.Repeat("a", 65536))...),
 		},
 		{
 			testStr("abcd"),
-			[]byte{version, id(testStr("")), 4, 97, 98, 99, 100},
+			[]byte{version, id(testStr("")), 0b0001_0000 | 4, 97, 98, 99, 100},
 		},
+	}
+	checkEncodedData(t, items)
+}
+
+func TestSerialization_Uint8(t *testing.T) {
+	uint8Id := id(uint8(0))
+	items := []serializerTestItems{
+		{
+			uint8(0),
+			[]byte{version, uint8Id, 0},
+		},
+		{
+			uint8(1),
+			[]byte{version, uint8Id, 1},
+		},
+		{
+			uint8(255),
+			[]byte{version, uint8Id, 255},
+		},
+		{
+			testUint8(123),
+			[]byte{version, id(testUint8(0)), 123},
+		},
+	}
+	checkEncodedData(t, items)
+}
+
+func TestSerialization_Int8(t *testing.T) {
+	int8Id := id(int8(0))
+	var items = []serializerTestItems{
+		{
+			int8(0),
+			[]byte{version, int8Id, 0},
+		},
+		{
+			int8(1),
+			[]byte{version, int8Id, 2},
+		},
+		{
+			int8(-1),
+			[]byte{version, int8Id, 1},
+		},
+		{
+			int8(127),
+			[]byte{version, int8Id, 254},
+		},
+		{
+			int8(-128),
+			[]byte{version, int8Id, 255},
+		},
+		{
+			testInt8(123),
+			[]byte{version, id(testInt8(0)), 246},
+		},
+	}
+	checkEncodedData(t, items)
+}
+
+func TestSerialization_Uint16(t *testing.T) {
+	uint16Id := id(uint16(0))
+	var items = []serializerTestItems{
+		{
+			uint16(0),
+			[]byte{version, uint16Id, 0b0100_0000},
+		},
+		{
+			uint16(1),
+			[]byte{version, uint16Id, 0b0100_0000 | 1},
+		},
+		{
+			uint16(256),
+			[]byte{version, uint16Id, 0b1000_0000 | 1, 0},
+		},
+		{
+			uint16(65535),
+			[]byte{version, uint16Id, 0b1100_0000, 255, 255},
+		},
+		{
+			testUint16(12345),
+			[]byte{version, id(testUint16(0)), 0b1000_0000 | 48, 57},
+		},
+	}
+	checkEncodedData(t, items)
+}
+
+
+func TestSerialization_Float32(t *testing.T) {
+	float32Id := id(float32(0))
+	var items = []serializerTestItems{
+		{
+			float32(0),
+			[]byte{version, float32Id, 0b0010_0000},
+		},
+		{
+			float32(1),
+			[]byte{version, float32Id, 0b0110_0000, 128, 63},
+		},
+		{
+			float32(10),
+			[]byte{version, float32Id, 0b0110_0000, 32, 65},
+		},
+		{
+			float32(-1),
+			[]byte{version, float32Id, 0b0110_0000, 128, 191},
+		},
+		{
+			float32(-10),
+			[]byte{version, float32Id, 0b0110_0000, 32, 193},
+		},
+		{
+			float32(1.23),
+			[]byte{version, float32Id, 0b1010_0000, 164, 112, 157, 63},
+		},
+		{
+			float32(-1.23),
+			[]byte{version, float32Id, 0b1010_0000, 164, 112, 157, 191},
+		},
+		{
+			testFloat32(123),
+			[]byte{version, id(testFloat32(0)), 0b0110_0000, 246, 66},
+		},
+	}
+	checkEncodedData(t, items)
+}
+
+func TestSerialization_Float64(t *testing.T) {
+	float64Id := id(float64(0))
+	var items = []serializerTestItems{
+		{
+			float64(0),
+			[]byte{version, float64Id, 0b0001_0000},
+		},
+		{
+			float64(1),
+			[]byte{version, float64Id, 0b0011_0000, 240, 63},
+		},
+		{
+			float64(10),
+			[]byte{version, float64Id, 0b0011_0000, 36, 64},
+		},
+		{
+			float64(-1),
+			[]byte{version, float64Id, 0b0011_0000, 240, 191},
+		},
+		{
+			float64(-10),
+			[]byte{version, float64Id, 0b0011_0000, 36, 192},
+		},
+		{
+			1.23,
+			[]byte{version, float64Id, 0b1001_0000, 174, 71, 225, 122, 20, 174, 243, 63},
+		},
+		{
+			-1.23,
+			[]byte{version, float64Id, 0b1001_0000, 174, 71, 225, 122, 20, 174, 243, 191},
+		},
+		{
+			testFloat64(123),
+			[]byte{version, id(testFloat64(0)), 0b0100_0000, 192, 94, 64},
+		},
+	}
+	checkEncodedData(t, items)
+}
+
+func TestSerialization_Int16(t *testing.T) {
+	int16Id := id(int16(0))
+	var items = []serializerTestItems{
+		{
+			int16(0),
+			[]byte{version, int16Id, 0b0100_0000},
+		},
+		{
+			int16(1),
+			[]byte{version, int16Id, 0b0100_0000 | 2},
+		},
+		{
+			int16(-1),
+			[]byte{version, int16Id, 0b0100_0000 | 1},
+		},
+		{
+			int16(256),
+			[]byte{version, int16Id, 0b1000_0000 | 2, 0},
+		},
+		{
+			int16(-256),
+			[]byte{version, int16Id, 0b1000_0000 | 1, 255},
+		},
+		{
+			int16(32767),
+			[]byte{version,int16Id, 0b1100_0000, 255, 254},
+		},
+		{
+			int16(-32768),
+			[]byte{version, int16Id, 0b1100_0000, 255, 255},
+		},
+		{
+			testInt16(-12345),
+			[]byte{version, id(testInt16(0)), 0b1100_0000, 96, 113},
+		},
+	}
+	checkEncodedData(t, items)
+}
+
+
+func TestSerialization_Slice(t *testing.T) {
+	var items = []serializerTestItems{
+		{
+			([]string)(nil),
+			[]byte{version, id([]string{}), 1},
+		},
+		{
+			[]bool{},
+			[]byte{version, id([]bool{}), 0, 0b0001_0000, 0b0001_0000},
+		},
+		{
+			[]byte{1, 2, 3},
+			[]byte{version, id([]byte{}), 0, 0b0001_0000 | 3, 0b0001_0000, 1, 2, 3},
+		},
+		{
+			bytes.Repeat([]byte{1}, 256),
+			append(
+				[]byte{version, id([]byte{}), 0, 0b0010_0000 | 1, 0, 0b0001_0000},
+				bytes.Repeat([]byte{1}, 256)...
+			),
+		},
+		{
+			bytes.Repeat([]byte{1}, 65536),
+			append(
+				[]byte{version, id([]byte{}), 0, 0b0011_0000 | 1, 0, 0, 0b0001_0000}, 
+				bytes.Repeat([]byte{1}, 65536)...
+			),
+		},
+		{
+			[]string{"a", "bc", "def"},
+			[]byte{
+				version, id([]string{}), 0, 0b0001_0000 | 3, 0b0001_0000,
+				0b0001_0000 | 1, 'a',
+				0b0001_0000 | 2, 'b', 'c',
+				0b0001_0000 | 3, 'd', 'e', 'f',
+			},
+		},
+		{
+			[]any{uint16(1), true, 1.23, "abc"},
+			[]byte{
+				version, id([]any{}), 0, 0b0001_0000 | 4, 0b0001_0000,
+				id(uint16(0)), 0b0100_0000 | 1,
+				id(false), 1,
+				id(float64(0)), 0b1001_0000, 174, 71, 225, 122, 20, 174, 243, 63,
+				id(""), 0b0001_0000 | 3, 'a', 'b', 'c',
+			},
+		},
+		/*{
+			testSlice{"a", "b", "c"},
+			[]byte{
+				version, tType, id(testSlice{}), tList, 3,
+				tString, 1, 97,
+				tString, 1, 98,
+				tString, 1, 99,
+			},
+		},
+		{
+			testGenericSlice[byte]{1, 2, 3},
+			[]byte{
+				version, tType, id(testGenericSlice[byte]{}), tList, 3,
+				tByte, 1,
+				tByte, 2,
+				tByte, 3,
+			},
+		},
+		{
+			testRecSlice{testRecSlice{nil}, nil},
+			[]byte{
+				version, tType, id(testRecSlice{}), tList, 2,
+				tType, id(testRecSlice{}), tList, 1, tType | null, id(testRecSlice{}), tList,
+				tType | null, id(testRecSlice{}), tList,
+			},
+		},*/
 	}
 	checkEncodedData(t, items)
 }
@@ -66,157 +352,12 @@ func checkEncodedData(t *testing.T, items []serializerTestItems) {
 	for _, item := range items {
 		data := serializer.Encode(item.value)
 		if !bytes.Equal(data, item.data) {
-			t.Errorf("Encode(%#v) must return %v, but actual value is %v", item.value, item.data, data)
+			t.Errorf("Encode(%v) must return %v, but actual value is %v", item.value, item.data, data)
 		}
 	}
 }
 
 /*
-
-func TestNilSerialization(t *testing.T) {
-	var args = []serializerTestArgs{
-		{
-			nil,
-			[]byte{version, tNil},
-		},
-	}
-	checkSerializer(args, t)
-}
-
-func TestBoolSerialization(t *testing.T) {
-	var args = []serializerTestArgs{
-		{
-			false,
-			[]byte{version, tBool},
-		},
-		{
-			true,
-			[]byte{version, tBool | tru},
-		},
-		{
-			testBool(true),
-			[]byte{version, tType, id(testBool(false)), tBool | tru},
-		},
-	}
-	checkSerializer(args, t)
-}
-
-func TestUint8Serialization(t *testing.T) {
-	var args = []serializerTestArgs{
-		{
-			uint8(0),
-			[]byte{version, tInt8, 0},
-		},
-		{
-			uint8(1),
-			[]byte{version, tInt8, 1},
-		},
-		{
-			uint8(255),
-			[]byte{version, tInt8, 255},
-		},
-		{
-			testUint8(123),
-			[]byte{version, tType, id(testUint8(0)), tInt8, 123},
-		},
-	}
-	checkSerializer(args, t)
-}
-
-func TestInt8Serialization(t *testing.T) {
-	var args = []serializerTestArgs{
-		{
-			int8(0),
-			[]byte{version, tInt8 | signed, 0},
-		},
-		{
-			int8(1),
-			[]byte{version, tInt8 | signed, 2},
-		},
-		{
-			int8(-1),
-			[]byte{version, tInt8 | signed, 1},
-		},
-		{
-			int8(127),
-			[]byte{version, tInt8 | signed, 254},
-		},
-		{
-			int8(-128),
-			[]byte{version, tInt8 | signed, 255},
-		},
-		{
-			testInt8(123),
-			[]byte{version, tType, id(testInt8(0)), tInt8 | signed, 246},
-		},
-	}
-	checkSerializer(args, t)
-}
-
-func TestUint16Serialization(t *testing.T) {
-	var args = []serializerTestArgs{
-		{
-			uint16(0),
-			[]byte{version, tInt16 | meta, 0},
-		},
-		{
-			uint16(1),
-			[]byte{version, tInt16 | meta, 1},
-		},
-		{
-			uint16(256),
-			[]byte{version, tInt16, 1, 0},
-		},
-		{
-			uint16(65535),
-			[]byte{version, tInt16, 255, 255},
-		},
-		{
-			testUint16(12345),
-			[]byte{version, tType, id(testUint16(0)), tInt16, 48, 57},
-		},
-	}
-	checkSerializer(args, t)
-}
-
-func TestInt16Serialization(t *testing.T) {
-	var args = []serializerTestArgs{
-		// Int16
-		{
-			int16(0),
-			[]byte{version, tInt16 | signed | meta, 0},
-		},
-		{
-			int16(1),
-			[]byte{version, tInt16 | signed | meta, 2},
-		},
-		{
-			int16(-1),
-			[]byte{version, tInt16 | signed | meta, 1},
-		},
-		{
-			int16(256),
-			[]byte{version, tInt16 | signed, 2, 0},
-		},
-		{
-			int16(-256),
-			[]byte{version, tInt16 | signed, 1, 255},
-		},
-		{
-			int16(32767),
-			[]byte{version, tInt16 | signed, 255, 254},
-		},
-		{
-			int16(-32768),
-			[]byte{version, tInt16 | signed, 255, 255},
-		},
-		{
-			testInt16(12345),
-			[]byte{version, tType, id(testInt16(0)), tInt16 | signed, 96, 114},
-		},
-	}
-	checkSerializer(args, t)
-}
 
 func TestUint32Serialization(t *testing.T) {
 	var args = []serializerTestArgs{
@@ -630,82 +771,6 @@ func TestIntSerialization(t *testing.T) {
 	checkSerializer(args, t)
 }
 
-func TestFloat32Serialization(t *testing.T) {
-	var args = []serializerTestArgs{
-		{
-			float32(0),
-			[]byte{version, tFloat, 0},
-		},
-		{
-			float32(1),
-			[]byte{version, tFloat | 0b0001, 128, 63},
-		},
-		{
-			float32(10),
-			[]byte{version, tFloat | 0b0001, 32, 65},
-		},
-		{
-			float32(-1),
-			[]byte{version, tFloat | 0b0001, 128, 191},
-		},
-		{
-			float32(-10),
-			[]byte{version, tFloat | 0b0001, 32, 193},
-		},
-		{
-			float32(1.23),
-			[]byte{version, tFloat | 0b0011, 164, 112, 157, 63},
-		},
-		{
-			float32(-1.23),
-			[]byte{version, tFloat | 0b0011, 164, 112, 157, 191},
-		},
-		{
-			testFloat32(123),
-			[]byte{version, tType, id(testFloat32(0)), tFloat | 0b001, 246, 66},
-		},
-	}
-	checkSerializer(args, t)
-}
-
-func TestFloat64Serialization(t *testing.T) {
-	var args = []serializerTestArgs{
-		{
-			float64(0),
-			[]byte{version, tFloat | wide, 0},
-		},
-		{
-			float64(1),
-			[]byte{version, tFloat | wide | 0b0001, 240, 63},
-		},
-		{
-			float64(10),
-			[]byte{version, tFloat | wide | 0b0001, 36, 64},
-		},
-		{
-			float64(-1),
-			[]byte{version, tFloat | wide | 0b0001, 240, 191},
-		},
-		{
-			float64(-10),
-			[]byte{version, tFloat | wide | 0b0001, 36, 192},
-		},
-		{
-			1.23,
-			[]byte{version, tFloat | wide | 0b0111, 174, 71, 225, 122, 20, 174, 243, 63},
-		},
-		{
-			-1.23,
-			[]byte{version, tFloat | wide | 0b0111, 174, 71, 225, 122, 20, 174, 243, 191},
-		},
-		{
-			testFloat64(123),
-			[]byte{version, tType, id(testFloat64(0)), tFloat | wide | 0b010, 192, 94, 64},
-		},
-	}
-	checkSerializer(args, t)
-}
-
 func TestComplex64Serialization(t *testing.T) {
 	var args = []serializerTestArgs{
 		{
@@ -768,36 +833,6 @@ func TestComplex128Serialization(t *testing.T) {
 	checkSerializer(args, t)
 }
 
-func TestStringSerialization(t *testing.T) {
-	var args = []serializerTestArgs{
-		{
-			"",
-			[]byte{version, tString, 0},
-		},
-		{
-			"a",
-			[]byte{version, tString, 1, 97},
-		},
-		{
-			"ab",
-			[]byte{version, tString, 2, 97, 98},
-		},
-		{
-			strings.Repeat("a", 256),
-			append([]byte{version, tString | 0b0001, 1, 0}, []byte(strings.Repeat("a", 256))...),
-		},
-		{
-			strings.Repeat("a", 65536),
-			append([]byte{version, tString | 0b0010, 1, 0, 0}, []byte(strings.Repeat("a", 65536))...),
-		},
-		{
-			testString("abcd"),
-			[]byte{version, tType, id(testString("")), tString, 4, 97, 98, 99, 100},
-		},
-	}
-	checkSerializer(args, t)
-}
-
 func TestUintptrSerialization(t *testing.T) {
 	var args = []serializerTestArgs{
 		{
@@ -834,82 +869,6 @@ func TestUnsafePointerSerialization(t *testing.T) {
 	checkSerializer(args, t)
 }
 
-func TestSliceSerialization(t *testing.T) {
-	var args = []serializerTestArgs{
-		{
-			([]string)(nil),
-			[]byte{version, tType | null, id([]string{}), tList},
-		},
-		{
-			[]string{},
-			[]byte{version, tType, id([]string{}), tList, 0},
-		},
-		{
-			[]byte{1, 2, 3},
-			[]byte{version, tType, id([]byte{}), tList, 3, tByte, 1, tByte, 2, tByte, 3},
-		},
-		{
-			bytes.Repeat([]byte{1}, 256),
-			append([]byte{version, tType, id([]byte{}), tList | 0b0001, 1, 0}, bytes.Repeat([]byte{tByte, 1}, 256)...),
-		},
-		{
-			bytes.Repeat([]byte{1}, 65536),
-			append([]byte{version, tType, id([]byte{}), tList | 0b0010, 1, 0, 0}, bytes.Repeat([]byte{tByte, 1}, 65536)...),
-		},
-		{
-			[]int{},
-			[]byte{version, tType, id([]int{}), tList, 0},
-		},
-		{
-			[]int{1, -1, 0, 1234, -1234},
-			[]byte{
-				version, tType, id([]int{}), tList, 5,
-				tInt | signed, 2,
-				tInt | signed, 1,
-				tInt | signed, 0,
-				tInt | signed | 0b0001, 9, 164,
-				tInt | signed | 0b0001, 9, 163,
-			},
-		},
-		{
-			[]any{uint16(1), false, 1.23, "abc"},
-			[]byte{
-				version, tType, id([]any{}), tList, 4,
-				tInterface, tInt16 | meta, 1,
-				tInterface, tBool,
-				tInterface, tFloat | wide | 0b0111, 174, 71, 225, 122, 20, 174, 243, 63,
-				tInterface, tString, 3, 97, 98, 99,
-			},
-		},
-		{
-			testSlice{"a", "b", "c"},
-			[]byte{
-				version, tType, id(testSlice{}), tList, 3,
-				tString, 1, 97,
-				tString, 1, 98,
-				tString, 1, 99,
-			},
-		},
-		{
-			testGenericSlice[byte]{1, 2, 3},
-			[]byte{
-				version, tType, id(testGenericSlice[byte]{}), tList, 3,
-				tByte, 1,
-				tByte, 2,
-				tByte, 3,
-			},
-		},
-		{
-			testRecSlice{testRecSlice{nil}, nil},
-			[]byte{
-				version, tType, id(testRecSlice{}), tList, 2,
-				tType, id(testRecSlice{}), tList, 1, tType | null, id(testRecSlice{}), tList,
-				tType | null, id(testRecSlice{}), tList,
-			},
-		},
-	}
-	checkSerializer(args, t)
-}
 
 func TestArraySerialization(t *testing.T) {
 	var args = []serializerTestArgs{

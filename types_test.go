@@ -9,7 +9,14 @@ import (
 // Test types
 
 type (
+	testBool    bool
 	testStr     string
+	testUint8   uint8
+	testInt8    int8
+	testUint16  uint16
+	testInt16   int16
+	testFloat32 float32
+	testFloat64 float64
 	testBoolPtr *bool
 	testRecPtr  *testRecPtr
 )
@@ -17,7 +24,8 @@ type (
 // End test types
 
 func id(v any) byte {
-	return GetDefaultTypeRegistry().encodedType(reflect.ValueOf(v))[0]
+	id := GetDefaultTypeRegistry().typeIdByValue(reflect.ValueOf(v))
+	return asBytesWithSize(uint64(id), 3)[0]
 }
 
 func TestTypeName(t *testing.T) {
@@ -59,30 +67,30 @@ func TestTypeName(t *testing.T) {
 	}
 }
 
-func TestEncodedType(t *testing.T) {
+func TestTypeIdByValue(t *testing.T) {
 	items := []struct {
 		value       any
-		encodedType byte
+		encodedType int
 	}{
-		{nil, 0},
-		{false, 1},
-		{true, 1},
-		{"", 2},
-		{0, 3},
-		{(*any)(nil), 4},
-		{(*bool)(nil), 5},
-		{(*[]any)(nil), 6},
-		{[]struct{}{}, 7},
-		{(*int)(nil), 8},
-		{testBoolPtr(nil), 9},
-		{(*bool)(nil), 5},
-		{testRecPtr(nil), 10},
+		{nil, 1},
+		{false, 2},
+		{true, 2},
+		{"", 3},
+		{0, 4},
+		{(*any)(nil), 5},
+		{(*bool)(nil), 6},
+		{(*[]any)(nil), 7},
+		{[]struct{}{}, 8},
+		{(*int)(nil), 9},
+		{testBoolPtr(nil), 10},
+		{(*bool)(nil), 6},
+		{testRecPtr(nil), 11},
 	}
 	reg := NewTypeRegistry(true)
 	for i, item := range items {
-		expected := []byte{item.encodedType}
-		actual := reg.encodedType(reflect.ValueOf(item.value))
-		if !reflect.DeepEqual(actual, expected) {
+		expected := item.encodedType
+		actual := reg.typeIdByValue(reflect.ValueOf(item.value))
+		if actual != expected {
 			t.Errorf("type of value #%d (%#v) must be encoded as %#v, but received %#v", i+1, item.value, expected, actual)
 		}
 	}

@@ -8,7 +8,7 @@ import (
 
 type TypeRegistry struct {
 	typeAutoReg bool
-	types       []reflect.Type        // registered types
+	types       map[int]reflect.Type  // registered types
 	funcs       map[int]reflect.Value // registered functions
 	ids         map[string]int        // type full names and their ids
 	mx          sync.RWMutex
@@ -17,6 +17,7 @@ type TypeRegistry struct {
 func NewTypeRegistry(typeAutoReg bool) *TypeRegistry {
 	return &TypeRegistry{
 		typeAutoReg: typeAutoReg,
+		types:       make(map[int]reflect.Type),
 		funcs:       make(map[int]reflect.Value),
 		ids:         make(map[string]int),
 	}
@@ -92,7 +93,7 @@ func (r *TypeRegistry) RegisterFunc(f any) {
 	r.bindFuncWithName(v, name)
 }
 
-func (r *TypeRegistry) encodedType(v reflect.Value) []byte {
+func (r *TypeRegistry) typeIdByValue(v reflect.Value) int {
 	var name string
 	var t reflect.Type
 	if v.Kind() == reflect.Func {
@@ -104,7 +105,7 @@ func (r *TypeRegistry) encodedType(v reflect.Value) []byte {
 		name = r.typeName(t)
 	}
 	if id, exists := r.typeIdByName(name); exists {
-		return asBytes(uint64(id))
+		return id
 	}
 	if !r.typeAutoReg {
 		panic(fmt.Errorf("unregistered type: %s", name))
@@ -115,7 +116,7 @@ func (r *TypeRegistry) encodedType(v reflect.Value) []byte {
 	} else {
 		id = r.bindTypeWithName(t, name)
 	}
-	return asBytes(uint64(id))
+	return id
 }
 
 func (r *TypeRegistry) typeIdByName(name string) (id int, exists bool) {
@@ -128,7 +129,7 @@ func (r *TypeRegistry) typeIdByName(name string) (id int, exists bool) {
 func (r *TypeRegistry) bindTypeWithName(t reflect.Type, name string) int {
 	r.mx.Lock()
 	id := r.assignTypeId(name)
-	r.types = append(r.types, t)
+	r.types[id] = t
 	r.mx.Unlock()
 	return id
 }
@@ -136,7 +137,7 @@ func (r *TypeRegistry) bindTypeWithName(t reflect.Type, name string) int {
 func (r *TypeRegistry) bindFuncWithName(v reflect.Value, name string) int {
 	r.mx.Lock()
 	id := r.assignTypeId(name)
-	r.types = append(r.types, v.Type())
+	r.types[id] = v.Type()
 	r.funcs[id] = v
 	r.mx.Unlock()
 	return id
@@ -145,7 +146,7 @@ func (r *TypeRegistry) bindFuncWithName(v reflect.Value, name string) int {
 func (r *TypeRegistry) assignTypeId(name string) int {
 	id, exists := r.ids[name]
 	if !exists {
-		id = len(r.ids)
+		id = len(r.ids)+1
 		r.ids[name] = id
 	}
 	return id

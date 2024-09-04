@@ -1,51 +1,44 @@
 package codec
 
-import "math/bits"
+import (
+	"math/bits"
+)
 
-// minByteSize returns the minimum number of bytes required to represent v
-func minByteSize(v uint64) int {
-	if v == 0 {
-		return 1
+func minByteCount(v uint64, metaBitCount int) (valueByteCount int, totalByteCount int) {
+	bitCount := bits.Len64(v)
+	if bitCount == 0 {
+		bitCount++
 	}
-	size := bits.Len64(v)
-	if size&7 == 0 {
-		return size >> 3
+	if bitCount&7 == 0 {
+		valueByteCount = bitCount >> 3
+	} else {
+		valueByteCount = bitCount>>3 + 1
 	}
-	return size>>3 + 1
+	bitCount += metaBitCount
+	if bitCount&7 == 0 {
+		totalByteCount = bitCount >> 3
+	} else {
+		totalByteCount = bitCount>>3 + 1
+	}
+	return
 }
 
-func minByteSizeWithMeta(v uint64, metaSize int) int {
-	size := bits.Len64(v)
-	if size == 0 {
-		size++
+// asBytesWithMeta returns the minimum byte representation of v with byte size info in big endian
+func asBytesWithSize(v uint64, sizeBits int) []byte {
+	valueByteCount, totalByteCount := minByteCount(v, sizeBits)
+	if totalByteCount > valueByteCount {
+		return append([]byte{byte(totalByteCount << (8 - sizeBits))}, asBytes(v, valueByteCount)...)
 	}
-	size += metaSize
-	if size&7 == 0 {
-		return size >> 3
-	}
-	return size>>3 + 1
+	return asBytes(v | uint64(totalByteCount << (8 * totalByteCount - sizeBits)), totalByteCount)
 }
 
-// minBytes returns the minimum number of bytes required to represent v
-// and its byte representation in big endian
-func minBytes(v uint64) (int, []byte) {
-	size := minByteSize(v)
-	bytes := make([]byte, size)
-	for i, j := 0, size; j > 0; i++ {
-		j--
-		bytes[i] = byte(v >> (j << 3))
-	}
-	return size, bytes
+func asMinBytes(v uint64) []byte {
+	_, byteCount := minByteCount(v, 0)
+	return asBytes(v, byteCount)
 }
 
-// toBytes returns the minimum byte representation of v in big endian
-func asBytes(v uint64) []byte {
-	_, b := minBytes(v)
-	return b
-}
-
-// asBytesOfSize returns the v's byte representation of the given size in big endian
-func asBytesOfSize(v uint64, size int) []byte {
+// asBytes returns the v's byte representation of the given size in big endian
+func asBytes(v uint64, size int) []byte {
 	bytes := make([]byte, size)
 	for i := 0; size > 0; i++ {
 		size--

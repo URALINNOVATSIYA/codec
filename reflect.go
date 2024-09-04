@@ -22,7 +22,7 @@ func determineReflectValueFlagOffset() {
 	}
 }
 
-func makeExported(v reflect.Value) reflect.Value {
+func makeExportable(v reflect.Value) reflect.Value {
 	if hasFlagField {
 		flag := (*uintptr)(unsafe.Pointer(uintptr(unsafe.Pointer(&v)) + flagOffset))
 		*flag &= maskFlagRO
@@ -31,7 +31,7 @@ func makeExported(v reflect.Value) reflect.Value {
 }
 
 func setValue(oldValue reflect.Value, newValue reflect.Value) {
-	oldValue.Set(makeExported(newValue))
+	oldValue.Set(makeExportable(newValue))
 }
 
 func changeValue(oldValue reflect.Value, newValue any) {
