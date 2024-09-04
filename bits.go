@@ -29,7 +29,7 @@ func asBytesWithSize(v uint64, sizeBits int) []byte {
 	if totalByteCount > valueByteCount {
 		return append([]byte{byte(totalByteCount << (8 - sizeBits))}, asBytes(v, valueByteCount)...)
 	}
-	return asBytes(v | uint64(totalByteCount << (8 * totalByteCount - sizeBits)), totalByteCount)
+	return asBytes(v|uint64(totalByteCount<<(8*totalByteCount-sizeBits)), totalByteCount)
 }
 
 func asMinBytes(v uint64) []byte {

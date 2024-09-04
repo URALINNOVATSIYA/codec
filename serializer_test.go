@@ -151,7 +151,6 @@ func TestSerialization_Uint16(t *testing.T) {
 	checkEncodedData(t, items)
 }
 
-
 func TestSerialization_Float32(t *testing.T) {
 	float32Id := id(float32(0))
 	var items = []serializerTestItems{
@@ -255,7 +254,7 @@ func TestSerialization_Int16(t *testing.T) {
 		},
 		{
 			int16(32767),
-			[]byte{version,int16Id, 0b1100_0000, 255, 254},
+			[]byte{version, int16Id, 0b1100_0000, 255, 254},
 		},
 		{
 			int16(-32768),
@@ -268,7 +267,6 @@ func TestSerialization_Int16(t *testing.T) {
 	}
 	checkEncodedData(t, items)
 }
-
 
 func TestSerialization_Slice(t *testing.T) {
 	var items = []serializerTestItems{
@@ -288,14 +286,14 @@ func TestSerialization_Slice(t *testing.T) {
 			bytes.Repeat([]byte{1}, 256),
 			append(
 				[]byte{version, id([]byte{}), 0, 0b0010_0000 | 1, 0, 0b0001_0000},
-				bytes.Repeat([]byte{1}, 256)...
+				bytes.Repeat([]byte{1}, 256)...,
 			),
 		},
 		{
 			bytes.Repeat([]byte{1}, 65536),
 			append(
-				[]byte{version, id([]byte{}), 0, 0b0011_0000 | 1, 0, 0, 0b0001_0000}, 
-				bytes.Repeat([]byte{1}, 65536)...
+				[]byte{version, id([]byte{}), 0, 0b0011_0000 | 1, 0, 0, 0b0001_0000},
+				bytes.Repeat([]byte{1}, 65536)...,
 			),
 		},
 		{

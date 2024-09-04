@@ -104,7 +104,7 @@ func (s *Serializer) encodeValue(v reflect.Value) (bytes []byte, isReferencedVal
 	case reflect.Uint32:
 		bytes = s.encodeUint32(v)
 	case reflect.Int32:
-		bytes = s.encodeInt32(v)	
+		bytes = s.encodeInt32(v)
 	case reflect.Uint64:
 		bytes = s.encodeUint64(v)
 	case reflect.Int64:
@@ -122,13 +122,13 @@ func (s *Serializer) encodeValue(v reflect.Value) (bytes []byte, isReferencedVal
 	case reflect.Map:
 		bytes = s.encodeMap(v)
 	case reflect.Chan:
-		bytes = s.encodeChan(v)	
-	case reflect.Interface:	
+		bytes = s.encodeChan(v)
+	case reflect.Interface:
 		bytes = s.encodeInterface(v)
 	case reflect.Func:
-		bytes = s.encodeFunc(v)	
+		bytes = s.encodeFunc(v)
 	case reflect.Pointer:
-		bytes = s.encodePointer(v)		
+		bytes = s.encodePointer(v)
 	default:
 		panic(fmt.Errorf("unsupported type kind %q", v.Kind()))
 	}

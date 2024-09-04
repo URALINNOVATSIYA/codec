@@ -146,7 +146,7 @@ func (r *TypeRegistry) bindFuncWithName(v reflect.Value, name string) int {
 func (r *TypeRegistry) assignTypeId(name string) int {
 	id, exists := r.ids[name]
 	if !exists {
-		id = len(r.ids)+1
+		id = len(r.ids) + 1
 		r.ids[name] = id
 	}
 	return id
