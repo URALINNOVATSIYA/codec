@@ -268,6 +268,41 @@ func TestSerialization_Int16(t *testing.T) {
 	checkEncodedData(t, items)
 }
 
+func TestSerialization_Pointer(t *testing.T) {
+	var items = []serializerTestItems{
+		{
+			(*byte)(nil),
+			[]byte{version, id((*byte)(nil)), 0b1000_0000},
+		},
+		{
+			(*any)(nil),
+			[]byte{version, id((*any)(nil)), 0b1000_0000},
+		},
+		{
+			func() any {
+				b := byte(255)
+				return &b
+			}(),
+			[]byte{version, id((*byte)(nil)), 0, 255},
+		},
+		{
+			func() any {
+				s := "123"
+				return &s
+			}(),
+			[]byte{version, id((*string)(nil)), 0, 0b0001_0000 | 3, '1', '2', '3'},
+		},
+		{
+			func() any {
+				var x any = true
+				return &x
+			}(),
+			[]byte{version, id((*any)(nil)), 0, id(false), 1},
+		},
+	}
+	checkEncodedData(t, items)
+}
+
 func TestSerialization_Slice(t *testing.T) {
 	var items = []serializerTestItems{
 		{
@@ -306,41 +341,33 @@ func TestSerialization_Slice(t *testing.T) {
 			},
 		},
 		{
-			[]any{uint16(1), true, 1.23, "abc"},
+			[]any{uint16(1), true, 1.23, "abc", nil},
 			[]byte{
-				version, id([]any{}), 0, 0b0001_0000 | 4, 0b0001_0000,
+				version, id([]any{}), 0, 0b0001_0000 | 5, 0b0001_0000,
 				id(uint16(0)), 0b0100_0000 | 1,
 				id(false), 1,
 				id(float64(0)), 0b1001_0000, 174, 71, 225, 122, 20, 174, 243, 63,
 				id(""), 0b0001_0000 | 3, 'a', 'b', 'c',
-			},
-		},
-		/*{
-			testSlice{"a", "b", "c"},
-			[]byte{
-				version, tType, id(testSlice{}), tList, 3,
-				tString, 1, 97,
-				tString, 1, 98,
-				tString, 1, 99,
+				id(nil), 0,
 			},
 		},
 		{
-			testGenericSlice[byte]{1, 2, 3},
+			testSlice{"a", "b", "c"},
 			[]byte{
-				version, tType, id(testGenericSlice[byte]{}), tList, 3,
-				tByte, 1,
-				tByte, 2,
-				tByte, 3,
+				version, id(testSlice{}), 0, 0b0001_0000 | 3, 0b0001_0000,
+				0b0001_0000 | 1, 'a',
+				0b0001_0000 | 1, 'b',
+				0b0001_0000 | 1, 'c',
 			},
 		},
 		{
 			testRecSlice{testRecSlice{nil}, nil},
 			[]byte{
-				version, tType, id(testRecSlice{}), tList, 2,
-				tType, id(testRecSlice{}), tList, 1, tType | null, id(testRecSlice{}), tList,
-				tType | null, id(testRecSlice{}), tList,
+				version, id(testRecSlice{}), 0, 0b0001_0000 | 2, 0b0001_0000,
+				0, 0b0001_0000 | 1, 0b0001_0000, 1,
+				1,
 			},
-		},*/
+		},
 	}
 	checkEncodedData(t, items)
 }

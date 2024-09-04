@@ -9,16 +9,18 @@ import (
 // Test types
 
 type (
-	testBool    bool
-	testStr     string
-	testUint8   uint8
-	testInt8    int8
-	testUint16  uint16
-	testInt16   int16
-	testFloat32 float32
-	testFloat64 float64
-	testBoolPtr *bool
-	testRecPtr  *testRecPtr
+	testBool     bool
+	testStr      string
+	testUint8    uint8
+	testInt8     int8
+	testUint16   uint16
+	testInt16    int16
+	testFloat32  float32
+	testFloat64  float64
+	testSlice    []string
+	testRecSlice []testRecSlice
+	testBoolPtr  *bool
+	testRecPtr   *testRecPtr
 )
 
 // End test types

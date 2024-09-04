@@ -301,6 +301,9 @@ func (s *Serializer) encodePointer(v reflect.Value) []byte {
 	if ok {
 		return append([]byte{1}, s.encodeReference(cnt)...)
 	}
+	if v.IsNil() {
+		return []byte{0b1000_0000}
+	}
 	value, refVal := s.encodeValue(el)
 	if refVal {
 		return append([]byte{2}, value...)
