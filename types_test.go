@@ -9,26 +9,36 @@ import (
 // Test types
 
 type (
-	testBool     bool
-	testStr      string
-	testUint8    uint8
-	testInt8     int8
-	testUint16   uint16
-	testInt16    int16
-	testFloat32  float32
-	testFloat64  float64
-	testSlice    []string
-	testRecSlice []testRecSlice
-	testBoolPtr  *bool
-	testRecPtr   *testRecPtr
+	testBool          bool
+	testStr           string
+	testUint8         uint8
+	testInt8          int8
+	testUint16        uint16
+	testInt16         int16
+	testUint32        uint32
+	testInt32         int32
+	testUint64        uint64
+	testInt64         int64
+	testUint          uint
+	testInt           int
+	testUintptr       uintptr
+	testUnsafePointer unsafe.Pointer
+	testFloat32       float32
+	testFloat64       float64
+	testComplex64     complex64
+	testComplex128    complex128
+	testChan          <-chan *bool
+	testArray         [3]int
+	testSlice         []string
+	testRecSlice      []testRecSlice
+	testRecMap        map[byte]testRecMap
+	testBoolPtr       *bool
+	testRecPtr        *testRecPtr
 )
 
-// End test types
+type testInterface interface {}
 
-func id(v any) byte {
-	id := GetDefaultTypeRegistry().typeIdByValue(reflect.ValueOf(v))
-	return asBytesWithSize(uint64(id), 3)[0]
-}
+// End test types
 
 func TestTypeName(t *testing.T) {
 	items := []struct {
@@ -59,6 +69,7 @@ func TestTypeName(t *testing.T) {
 		{reflect.TypeOf((*bool)(nil)), "*bool"},
 		{reflect.TypeOf((***complex64)(nil)), "***complex64"},
 		{reflect.TypeOf(testRecPtr(nil)), "github.com/URALINNOVATSIYA/codec.testRecPtr"},
+		{reflect.TypeOf([]testInterface{}).Elem(), "github.com/URALINNOVATSIYA/codec.testInterface"},
 	}
 	reg := NewTypeRegistry(false)
 	for i, item := range items {
