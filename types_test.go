@@ -34,9 +34,18 @@ type (
 	testRecMap        map[byte]testRecMap
 	testBoolPtr       *bool
 	testRecPtr        *testRecPtr
+	testStruct        struct {
+		F1 string
+		F2 bool
+		F3 *testStruct
+		F4 any
+		f5 int
+		f6 string
+		f7 *testStruct
+	}
 )
 
-type testInterface interface {}
+type testInterface interface{}
 
 // End test types
 

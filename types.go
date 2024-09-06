@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"reflect"
 	"sync"
+	"unsafe"
 )
 
 type TypeRegistry struct {
@@ -41,27 +42,25 @@ func (r *TypeRegistry) RegisteredTypeNames() []string {
 
 func (r *TypeRegistry) RegisterBaseTypes() {
 	r.RegisterTypeOf(nil)
-	//r.RegisterType(reflect.TypeOf([]any{}).Elem()) // interface{}
-	//r.RegisterTypeOf(false)
-	/*
-		reflect.TypeOf(false),
-		reflect.TypeOf(""),
-		reflect.TypeOf(int8(0)),
-		reflect.TypeOf(uint8(0)),
-		reflect.TypeOf(int16(0)),
-		reflect.TypeOf(uint16(0)),
-		reflect.TypeOf(int32(0)),
-		reflect.TypeOf(uint32(0)),
-		reflect.TypeOf(int64(0)),
-		reflect.TypeOf(uint64(0)),
-		reflect.TypeOf(0),
-		reflect.TypeOf(uint(0)),
-		reflect.TypeOf(float32(0)),
-		reflect.TypeOf(float64(0)),
-		reflect.TypeOf(complex64(0)),
-		reflect.TypeOf(complex128(0)),
-		reflect.TypeOf(uintptr(0)),
-		reflect.TypeOf(unsafe.Pointer(uintptr(0))),*/
+	r.RegisterTypeOf(false)
+	r.RegisterTypeOf("")
+	r.RegisterTypeOf(int8(0))
+	r.RegisterTypeOf(uint8(0))
+	r.RegisterTypeOf(int16(0))
+	r.RegisterTypeOf(uint16(0))
+	r.RegisterTypeOf(int32(0))
+	r.RegisterTypeOf(uint32(0))
+	r.RegisterTypeOf(int64(0))
+	r.RegisterTypeOf(uint64(0))
+	r.RegisterTypeOf(int(0))
+	r.RegisterTypeOf(uint(0))
+	r.RegisterTypeOf(float32(0))
+	r.RegisterTypeOf(float64(0))
+	r.RegisterTypeOf(complex64(0))
+	r.RegisterTypeOf(complex128(0))
+	r.RegisterTypeOf(uintptr(0))
+	r.RegisterTypeOf(unsafe.Pointer(nil))
+	r.RegisterType(reflect.TypeOf((*any)(nil)).Elem()) // interface {}
 }
 
 func (r *TypeRegistry) RegisterTypeOf(v any) {

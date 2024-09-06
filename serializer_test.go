@@ -2,6 +2,7 @@ package codec
 
 import (
 	"bytes"
+	"errors"
 	"math"
 	"reflect"
 	"strings"
@@ -15,6 +16,15 @@ func registry() (*TypeRegistry, func(v any) byte) {
 		id := reg.typeIdByValue(reflect.ValueOf(v))
 		return asBytesWithSize(uint64(id), 3)[0]
 	}
+}
+
+func interfaceId(reg *TypeRegistry) byte {
+	id, exists := reg.typeIdByName("interface {}")
+	if exists {
+		return asBytesWithSize(uint64(id), 3)[0]
+	}
+	reg.RegisterType(reflect.TypeOf((*any)(nil)).Elem())
+	return interfaceId(reg)
 }
 
 type serializerTestItems struct {
@@ -877,15 +887,6 @@ func TestSerialization_Func(t *testing.T) {
 	checkEncodedData(t, reg, items)
 }
 
-/*func TestSerialization_Interface(t *testing.T) {
-	reg, id := registry()
-	var items = []serializerTestItems{
-		
-	}
-	checkEncodedData(t, reg, items)
-}*/
-
-
 func TestSerialization_Slice(t *testing.T) {
 	reg, id := registry()
 	var items = []serializerTestItems{
@@ -1040,6 +1041,229 @@ func TestSerialization_Map(t *testing.T) {
 	checkEncodedData(t, reg, items)
 }
 
+func TestSerialization_StructDefaultCodingMode(t *testing.T) {
+	SetDefaultStructCodingMode(StructCodingModeDefault)
+	reg, id := registry()
+	var items = []serializerTestItems{
+		{
+			func() any {
+				s := &testStruct{
+					F1: "abc",
+					F2: true,
+					F3: nil,
+					F4: nil,
+					f5: 321,
+					f6: "#",
+					f7: nil,
+				}
+				s.F3 = s
+				s.F4 = &s.F1
+				return s
+			}(),
+			[]byte{
+				version,
+				id((*testStruct)(nil)), 0, // *testStruct
+				0b0001_0000 | 7,           // field count
+				id(""), 0b0001_0000 | 3, 'a', 'b', 'c', // F1
+				id(false), 1,                           // F2
+				id((*testStruct)(nil)), 0, meta_ref, 0b0010_0000 | 1, // F3 = &testStruct
+				interfaceId(reg), id((*string)(nil)), 0, meta_ref, 0b0010_0000 | 2, // F4 = &F1
+				id(0), 0b0010_0000 | 2, 130,                            // f5
+				id(""), 0b0001_0000 | 1, '#',                           // f6
+				id((*testStruct)(nil)), meta_nil,                       // f7
+			},
+		},
+		{
+			errors.New("err"),
+			[]byte{
+				version,
+				id(reflect.ValueOf(errors.New("")).Interface()), 0, // &errors.errorString
+				0b0001_0000 | 1,                        // errors.errorString
+				id(""), 0b0001_0000 | 3, 'e', 'r', 'r', // "err"
+			},
+		},
+		{
+			struct {
+				_  string
+				f1 bool
+				f2 byte
+			}{
+				"",
+				true,
+				123,
+			},
+			[]byte{
+				version,
+				id(struct {
+					_  string
+					f1 bool
+					f2 byte
+				}{}), 0b0001_0000 | 3,
+				id(""), 0b0001_0000,
+				id(false), 1,
+				id(byte(0)), 123,
+			},
+		},
+	}
+	checkEncodedData(t, reg, items)
+	SetDefaultStructCodingMode(StructCodingModeDefault)
+}
+
+func TestSerialization_StructIndexCodingMode(t *testing.T) {
+	SetDefaultStructCodingMode(StructCodingModeIndex)
+	reg, id := registry()
+	var items = []serializerTestItems{
+		{
+			func() any {
+				s := &testStruct{
+					F1: "abc",
+					F2: true,
+					F3: nil,
+					F4: nil,
+					f5: 321,
+					f6: "#",
+					f7: nil,
+				}
+				s.F3 = s
+				s.F4 = &s.F1
+				return s
+			}(),
+			[]byte{
+				version,
+				id((*testStruct)(nil)), 0, // *testStruct
+				0b0001_0000 | 7,           // field count
+				0b0001_0000,                            // F1 index = 0
+				id(""), 0b0001_0000 | 3, 'a', 'b', 'c', // F1
+				0b0001_0000 | 1,                        // F2 index = 1
+				id(false), 1,                           // F2
+				0b0001_0000 | 2,                        // F3 index = 2
+				id((*testStruct)(nil)), 0, meta_ref, 0b0010_0000 | 1, // F3 = &testStruct
+				0b0001_0000 | 3,                                                    // F4 index = 3
+				interfaceId(reg), id((*string)(nil)), 0, meta_ref, 0b0010_0000 | 2, // F4 = &F1
+				0b0001_0000 | 4,                                        // f5 index = 4
+				id(0), 0b0010_0000 | 2, 130,                            // f5
+				0b0001_0000 | 5,                                        // f6 index = 5
+				id(""), 0b0001_0000 | 1, '#',                           // f6
+				0b0001_0000 | 6,                                        // f7 index = 6
+				id((*testStruct)(nil)), meta_nil,                       // f7
+			},
+		},
+		{
+			errors.New("err"),
+			[]byte{
+				version,
+				id(reflect.ValueOf(errors.New("")).Interface()), 0, // &errors.errorString
+				0b0001_0000 | 1,                        // errors.errorString
+				0b0001_0000,                            // field index
+				id(""), 0b0001_0000 | 3, 'e', 'r', 'r', // "err"
+			},
+		},
+		{
+			struct {
+				_  string
+				f1 bool
+				f2 byte
+			}{
+				"",
+				true,
+				123,
+			},
+			[]byte{
+				version,
+				id(struct {
+					_  string
+					f1 bool
+					f2 byte
+				}{}), 0b0001_0000 | 3,
+				0b0001_0000, id(""), 0b0001_0000,
+				0b0001_0000 | 1, id(false), 1,
+				0b0001_0000 | 2, id(byte(0)), 123,
+			},
+		},
+	}
+	checkEncodedData(t, reg, items)
+	SetDefaultStructCodingMode(StructCodingModeDefault)
+}
+
+func TestSerialization_StructNameCodingMode(t *testing.T) {
+	SetDefaultStructCodingMode(StructCodingModeName)
+	reg, id := registry()
+	var items = []serializerTestItems{
+		{
+			func() any {
+				s := &testStruct{
+					F1: "abc",
+					F2: true,
+					F3: nil,
+					F4: nil,
+					f5: 321,
+					f6: "#",
+					f7: nil,
+				}
+				s.F3 = s
+				s.F4 = &s.F1
+				return s
+			}(),
+			[]byte{
+				version,
+				id((*testStruct)(nil)), 0, // *testStruct
+				0b0001_0000 | 7,           // field count
+				0b0001_0000 | 2, 'F', '1',              // F1 name
+				id(""), 0b0001_0000 | 3, 'a', 'b', 'c', // F1
+				0b0001_0000 | 2, 'F', '2',              // F2 name
+				id(false), 1,                           // F2
+				0b0001_0000 | 2, 'F', '3',              // F3 name
+				id((*testStruct)(nil)), 0, meta_ref, 0b0010_0000 | 1, // F3 = &testStruct
+				0b0001_0000 | 2, 'F', '4',                                          // F4 name
+				interfaceId(reg), id((*string)(nil)), 0, meta_ref, 0b0010_0000 | 2, // F4 = &F1
+				0b0001_0000 | 2, 'f', '5',                              // f5 name
+				id(0), 0b0010_0000 | 2, 130,                            // f5
+				0b0001_0000 | 2, 'f', '6',                              // f6 name
+				id(""), 0b0001_0000 | 1, '#',                           // f6
+				0b0001_0000 | 2, 'f', '7',                              // f7 name
+				id((*testStruct)(nil)), meta_nil,                       // f7
+			},
+		},
+		{
+			errors.New("err"),
+			[]byte{
+				version,
+				id(reflect.ValueOf(errors.New("")).Interface()), 0, // &errors.errorString
+				0b0001_0000 | 1,                        // errors.errorString
+				0b0001_0000 | 1, 's',                   // field name
+				id(""), 0b0001_0000 | 3, 'e', 'r', 'r', // "err"
+			},
+		},
+		{
+			struct {
+				_  string
+				f1 bool
+				f2 byte
+			}{
+				"",
+				true,
+				123,
+			},
+			[]byte{
+				version,
+				id(struct {
+					_  string
+					f1 bool
+					f2 byte
+				}{}), 0b0001_0000 | 3,
+				0b0001_0000 | 1, '_', 0b0001_0000, // _ name + index
+				id(""), 0b0001_0000,               // _ value
+				0b0001_0000 | 2, 'f', '1',         // f1 name
+				id(false), 1,                      // f1 value
+				0b0001_0000 | 2, 'f', '2',         // f2 name
+				id(byte(0)), 123,                  // f2 value
+			},
+		},
+	}
+	checkEncodedData(t, reg, items)
+	SetDefaultStructCodingMode(StructCodingModeDefault)
+}
+
 func TestSerialization_Pointer(t *testing.T) {
 	reg, id := registry()
 	var items = []serializerTestItems{
@@ -1099,7 +1323,7 @@ func TestSerialization_Reference(t *testing.T) {
 			[]byte{
 				version, 
 				id((*any)(nil)), 0,       // pointer type (pointer is not nil)
-				refval_type, 0b0010_0000, // pointer value (referenced value)
+				meta_ref, 0b0010_0000, // pointer value (referenced value)
 			},
 		},
 		{
@@ -1113,7 +1337,7 @@ func TestSerialization_Reference(t *testing.T) {
 				version,
 				id((*any)(nil)), 0, // x1
 				id((*any)(nil)), 0, // x2  
-				refval_type, 0b0010_0000, // referenced value
+				meta_ref, 0b0010_0000, // referenced value
 			},
 		},
 		{
@@ -1125,8 +1349,8 @@ func TestSerialization_Reference(t *testing.T) {
 				version,
 				id(([]*bool)(nil)), 0, 0b0001_0000 | 3, 0b0001_0000,
 				0, 1,
-				0, refval_type, 0b0010_0000 | 2,
-				0, refval_type, 0b0010_0000 | 2,
+				0, meta_ref, 0b0010_0000 | 2,
+				0, meta_ref, 0b0010_0000 | 2,
 			},
 		},
 		{
@@ -1141,8 +1365,44 @@ func TestSerialization_Reference(t *testing.T) {
 				id(([]any)(nil)), 0, 0b0001_0000 | 3, 
 				0b0001_0000 | 2, 0b0001_0000 | 1, 0b0001_0000 | 2, // list of ref indexes
 				id((*any)(nil)), 0, id(false), 1,                  // x[0] = &x[1]
-				refval_type, 0b0010_0000 | 3,                      // x[1] = true
-				refval_type, 0b0010_0000 | 2,                      // x[2] = &x[1]
+				meta_ref, 0b0010_0000 | 3,                      // x[1] = true
+				meta_ref, 0b0010_0000 | 2,                      // x[2] = &x[1]
+			},
+		},
+		{
+			func() any {
+				var x1 any
+				var x2 *any
+				var x3 **any
+				x2 = &x1
+				x3 = &x2
+				x1 = x3
+				return x3
+			}(),
+			[]byte{
+				version,
+				id((**any)(nil)), 0,   // **any
+				0,                     // *any
+				meta_ref, 0b0010_0000, // ref to **any 
+			},
+		},
+		{
+			func() any {
+				var x1 any
+				var x2 *any
+				var x3 **any
+				x2 = &x1
+				x3 = &x2
+				x1 = &x3
+				return x3
+			}(),
+			[]byte{
+				version,
+				id((**any)(nil)), 0,       // **any &x2
+				0,                         // *any  x2 = &x1
+				id((***any)(nil)), 0,      // ***any x1 = &x3
+				0,                         // **any = x3
+				meta_ref, 0b0010_0000 | 1, // ref to x2
 			},
 		},
 	}
@@ -1161,64 +1421,6 @@ func checkEncodedData(t *testing.T, typeRegistry *TypeRegistry, items []serializ
 
 /*
 
-func TestStructDefaultModeSerialization(t *testing.T) {
-	SetStructCodingMode(StructCodingModeDefault)
-	s := &testStruct{
-		F1: "abc",
-		F2: true,
-		F3: nil,
-		F4: nil,
-		f5: 321,
-		f6: "#",
-	}
-	s.F3 = s
-	s.F4 = &s.F1
-	var args = []serializerTestArgs{
-		{
-			s,
-			[]byte{
-				version,
-				tPointer,                            // *testStruct
-				tType, id(testStruct{}), tStruct, 7, // struct header
-				tString, 3, 97, 98, 99, // "abc"
-				tBool | tru, // true
-				tRef, 1,     // self ref
-				tInterface, tRef, 2, // *s.F1
-				tInt | signed | 0b0001, 2, 130, // 321
-				tString, 1, 35, // #
-				tPointer | null, tType, id(testStruct{}), tStruct, // s.f7 = *nil
-			},
-		},
-		{
-			errors.New("err"),
-			[]byte{
-				version, tPointer,
-				tType, id(reflect.ValueOf(errors.New("")).Elem().Interface()), tStruct, 1,
-				tString, 3, 101, 114, 114, // "err"
-			},
-		},
-		{
-			struct {
-				f1 bool
-				f2 byte
-			}{
-				true,
-				123,
-			},
-			[]byte{
-				version,
-				tType, id(struct {
-					f1 bool
-					f2 byte
-				}{}), tStruct, 2,
-				tBool | tru,
-				tByte, 123,
-			},
-		},
-	}
-	checkSerializer(args, t)
-
-}
 func TestStructIndexModeSerialization(t *testing.T) {
 	SetStructCodingMode(StructCodingModeIndex)
 	s := &testStruct{

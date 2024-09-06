@@ -9,11 +9,9 @@ import (
 )
 
 const (
-	refval_type byte = 0b0000_0000 // pseudo type for referenced values
-	meta_nil    byte = 0b0001_0000 // determines whether underlying value is nil
-	meta_fixed  byte = 0b0010_0000 // for lists that are arrays (i.e. have fixed size)
-	meta_ref    byte = 0b0100_0000 // determines pointer to already defined value
-	meta_refval byte = 0b1000_0000 // determines the referenced value
+	meta_ref   byte = 0b0000_0000 // pseudo type for referenced values
+	meta_nil   byte = 0b0001_0000 // determines whether underlying value is nil
+	meta_fixed byte = 0b0010_0000 // for lists that are arrays (i.e. have fixed size)
 )
 
 type Serializer struct {
@@ -76,14 +74,10 @@ func (s *Serializer) encodeType(v reflect.Value) []byte {
 }
 
 func (s *Serializer) encodeValue(v reflect.Value) (bytes []byte, isReferencedValue bool) {
-	addr := s.valueAddress(v)
-	//if addr != "" {
-		cnt, ok := s.refs[addr]
-		if ok {
-			return s.encodeReference(cnt), true
-		}
-		s.refs[addr] = s.cnt
-	//}
+	if cnt, ok := s.refs[v]; ok {
+		return s.encodeReference(cnt), true
+	}
+	s.refs[v] = s.cnt
 	s.cnt++
 	if isSerializable(v) {
 		return s.encodeSerializable(v), false
@@ -127,16 +121,18 @@ func (s *Serializer) encodeValue(v reflect.Value) (bytes []byte, isReferencedVal
 		bytes = s.encodeUintptr(v)
 	case reflect.UnsafePointer:
 		bytes = s.encodeUnsafePointer(v)
+	case reflect.Chan:
+		bytes = s.encodeChan(v)
+	case reflect.Func:
+		bytes = s.encodeFunc(v)
 	case reflect.Slice, reflect.Array:
 		bytes = s.encodeList(v)
 	case reflect.Map:
 		bytes = s.encodeMap(v)
-	case reflect.Chan:
-		bytes = s.encodeChan(v)
+	case reflect.Struct:
+		bytes = s.encodeStruct(v)
 	case reflect.Interface:
 		bytes, isReferencedValue = s.encodeInterface(v)
-	case reflect.Func:
-		bytes = s.encodeFunc(v)
 	case reflect.Pointer:
 		bytes = s.encodePointer(v)
 	default:
@@ -230,6 +226,23 @@ func (s *Serializer) encodeUnsafePointer(v reflect.Value) []byte {
 	return asBytesWithSize(uint64(v.Pointer()), 4)
 }
 
+func (s *Serializer) encodeChan(v reflect.Value) []byte {
+	b := []byte{byte(v.Type().ChanDir())}
+	if v.IsNil() {
+		b[0] |= meta_nil
+	} else {
+		b = append(b, s.encodeCount(v.Cap())...)
+	}
+	return b
+}
+
+func (s *Serializer) encodeFunc(v reflect.Value) []byte {
+	if v.IsNil() {
+		return []byte{meta_nil}
+	}
+	return []byte{0}
+}
+
 func (s *Serializer) encodeList(v reflect.Value) []byte {
 	var b []byte
 	if v.Kind() == reflect.Slice {
@@ -290,21 +303,34 @@ func (s *Serializer) encodeMap(v reflect.Value) []byte {
 	return b
 }
 
-func (s *Serializer) encodeChan(v reflect.Value) []byte {
-	b := []byte{byte(v.Type().ChanDir())}
-	if v.IsNil() {
-		b[0] |= meta_nil
-	} else {
-		b = append(b, s.encodeCount(v.Cap())...)
+func (s *Serializer) encodeStruct(v reflect.Value) []byte {
+	var fields []byte
+	var i, fieldCount int
+	switch s.structCodingMode {
+	case StructCodingModeIndex:
+		for i, fieldCount = 0, v.NumField(); i < fieldCount; i++ {
+			fields = append(fields, s.encodeCount(i)...)
+			field, _ := s.encode(v.Field(i))
+			fields = append(fields, field...)
+		}
+	case StructCodingModeName:
+		t := v.Type()
+		for i, fieldCount = 0, v.NumField(); i < fieldCount; i++ {
+			fieldName := t.Field(i).Name
+			fields = append(fields, s.encodeString(reflect.ValueOf(fieldName))...)
+			if fieldName == "_" {
+				fields = append(fields, s.encodeCount(i)...)
+			}
+			field, _ := s.encode(v.Field(i))
+			fields = append(fields, field...)
+		}
+	default:
+		for i, fieldCount = 0, v.NumField(); i < fieldCount; i++ {
+			field, _ := s.encode(v.Field(i))
+			fields = append(fields, field...)
+		}
 	}
-	return b
-}
-
-func (s *Serializer) encodeFunc(v reflect.Value) []byte {
-	if v.IsNil() {
-		return []byte{meta_nil}
-	}
-	return []byte{0}
+	return append(s.encodeCount(fieldCount), fields...)
 }
 
 func (s *Serializer) encodeInterface(v reflect.Value) ([]byte, bool) {
@@ -317,10 +343,14 @@ func (s *Serializer) encodePointer(v reflect.Value) []byte {
 	}
 	value, _ := s.encodeValue(v.Elem())
 	//if refVal {
-		//value[0] |= meta_refval
+	//value[0] |= meta_refval
 	//	return value //append([]byte{meta_ref}, value...)
 	//}
 	return append([]byte{0}, value...)
+}
+
+func (s *Serializer) encodeReference(cnt uint32) []byte {
+	return append([]byte{meta_ref}, asBytesWithSize(uint64(cnt), 3)...)
 }
 
 func (s *Serializer) encodeSerializable(v reflect.Value) []byte {
@@ -330,7 +360,7 @@ func (s *Serializer) encodeSerializable(v reflect.Value) []byte {
 	var b []byte
 	if v.Kind() == reflect.Pointer {
 		el := v.Elem()
-		cnt, ok := s.refs[s.valueAddress(el)]
+		cnt, ok := s.refs[el]
 		if ok {
 			return append([]byte{1}, s.encodeReference(cnt)...)
 		}
@@ -340,24 +370,19 @@ func (s *Serializer) encodeSerializable(v reflect.Value) []byte {
 	return append(b, body...)
 }
 
-func (s *Serializer) encodeReference(cnt uint32) []byte {
-	return append([]byte{refval_type}, asBytesWithSize(uint64(cnt), 3)...)
-}
-
 func (s *Serializer) encodeCount(length int) []byte {
 	return asBytesWithSize(uint64(length), 4)
 }
 
-func (s *Serializer) valueAddress(v reflect.Value) reflect.Value {
-	return v
-	/*if !v.CanAddr() {
+/*func (s *Serializer) valueAddress(v reflect.Value) reflect.Value {
+	if !v.CanAddr() {
 		return ""
 	}
 	id := s.typeRegistry.typeIdByValue(v)
 	b := asMinBytes(uint64(id))
 	b = append(b, asMinBytes(uint64(v.UnsafeAddr()))...)
-	return *(*string)(unsafe.Pointer(&b))*/
-}
+	return *(*string)(unsafe.Pointer(&b))
+}*/
 
 func Serialize(value any, options ...any) []byte {
 	return NewSerializer().
