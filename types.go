@@ -92,6 +92,16 @@ func (r *TypeRegistry) RegisterFunc(f any) {
 	r.bindFuncWithName(v, name)
 }
 
+func (r *TypeRegistry) typeById(id int) reflect.Type {
+	r.mx.RLock()
+	t, exists := r.types[id]
+	r.mx.RUnlock()
+	if !exists {
+		panic(fmt.Errorf("unrecognized type [id: %d]", id))
+	}
+	return t
+}
+
 func (r *TypeRegistry) typeIdByValue(v reflect.Value) int {
 	var name string
 	var t reflect.Type

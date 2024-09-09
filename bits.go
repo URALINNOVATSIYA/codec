@@ -55,3 +55,18 @@ func toUint(i int64) uint64 {
 	}
 	return uint64(^i<<1) | 1
 }
+
+func toInt(i uint64) int64 {
+	if i&1 != 0 { // negative
+		return ^int64(i >> 1)
+	}
+	return int64(i >> 1)
+}
+
+func bytesToUint(bytes []byte) uint64 {
+	var v uint64
+	for i, size := 0, len(bytes); i < size; i++ {
+		v = v<<8 | uint64(bytes[i])
+	}
+	return v
+}

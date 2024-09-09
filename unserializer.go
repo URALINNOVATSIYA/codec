@@ -1,5 +1,227 @@
 package codec
 
+import (
+	"errors"
+	"fmt"
+	"io"
+	"reflect"
+)
+
+type Unserializer struct {
+	cnt              uint32
+	pos              int
+	size             int
+	data             []byte
+	refs             map[uint32]reflect.Value
+	typeRegistry     *TypeRegistry
+	structCodingMode byte
+}
+
+func NewUnserializer() *Unserializer {
+	return &Unserializer{
+		typeRegistry:     GetDefaultTypeRegistry(),
+		structCodingMode: GetDefaultStructCodingMode(),
+	}
+}
+
+func (u *Unserializer) WithOptions(options []any) *Unserializer {
+	for _, option := range options {
+		if v, ok := option.(byte); ok {
+			u.WithStructCodingMode(v)
+			continue
+		}
+		if v, ok := option.(*TypeRegistry); ok {
+			u.WithTypeRegistry(v)
+			continue
+		}
+		panic(fmt.Errorf("invalid option type %T", option))
+	}
+	return u
+}
+
+func (u *Unserializer) WithTypeRegistry(registry *TypeRegistry) *Unserializer {
+	u.typeRegistry = registry
+	return u
+}
+
+func (u *Unserializer) WithStructCodingMode(mode byte) *Unserializer {
+	u.structCodingMode = mode
+	return u
+}
+
+func (u *Unserializer) Decode(data []byte) (value any, err error) {
+	if data == nil {
+		return nil, io.ErrUnexpectedEOF
+	}
+	defer func() {
+		if e := recover(); e != nil {
+			err = errors.New(e.(string))
+		}
+	}()
+	u.cnt = 0
+	u.pos = 1 // skip version for now
+	u.data = data
+	u.size = len(data)
+	u.refs = make(map[uint32]reflect.Value)
+	if v := u.decode(); v.IsValid() {
+		return v.Interface(), nil
+	}
+	return value, err
+}
+
+func (u *Unserializer) decode() reflect.Value {
+	return u.decodeValue(u.decodeType())
+}
+
+func (u *Unserializer) decodeType() reflect.Type {
+	return u.typeRegistry.typeById(int(u.decodeCount(3)))
+}
+
+func (u *Unserializer) decodeValue(t reflect.Type) reflect.Value {
+	var v reflect.Value
+	if t != nil {
+		v = reflect.New(t).Elem() // zero value of type t
+	}
+	switch v.Kind() {
+	case reflect.Bool:
+		u.decodeBool(v)
+	case reflect.String:
+		u.decodeString(v)
+	case reflect.Uint8:
+		u.decodeUint8(v)
+	case reflect.Int8:
+		u.decodeInt8(v)
+	case reflect.Uint16:
+		u.decodeUint16(v)
+	case reflect.Int16:
+		u.decodeInt16(v)	
+	case reflect.Uint32:
+		u.decodeUint32(v)
+	case reflect.Int32:
+		u.decodeInt32(v)		
+	case reflect.Uint64:
+		u.decodeUint64(v)	
+	case reflect.Int64:
+		u.decodeInt64(v)
+	case reflect.Uint:
+		u.decodeUint(v)	
+	case reflect.Int:
+		u.decodeInt(v)
+	case reflect.Interface:
+		u.decodeInterface(v)
+	case reflect.Pointer:
+		u.decodePointer(t.Elem(), v)	
+	}
+	return v
+}
+
+func (u *Unserializer) decodeBool(v reflect.Value) {
+	v.SetBool(u.readByte() == 1)
+}
+
+func (u *Unserializer) decodeString(v reflect.Value) {
+	v.SetString(string(u.readBytes(u.decodeLength())))
+}
+
+func (u *Unserializer) decodeUint8(v reflect.Value) {
+	v.SetUint(uint64(u.readByte()))
+}
+
+func (u *Unserializer) decodeInt8(v reflect.Value) {
+	v.SetInt(toInt(uint64(u.readByte())))
+}
+
+func (u *Unserializer) decodeUint16(v reflect.Value) {
+	v.SetUint(u.decodeCount(2))
+}
+
+func (u *Unserializer) decodeInt16(v reflect.Value) {
+	v.SetInt(toInt(u.decodeCount(2)))
+}
+
+func (u *Unserializer) decodeUint32(v reflect.Value) {
+	v.SetUint(u.decodeCount(3))
+}
+
+func (u *Unserializer) decodeInt32(v reflect.Value) {
+	v.SetInt(toInt(u.decodeCount(3)))
+}
+
+func (u *Unserializer) decodeUint64(v reflect.Value) {
+	v.SetUint(u.decodeCount(4))
+}
+
+func (u *Unserializer) decodeInt64(v reflect.Value) {
+	v.SetInt(toInt(u.decodeCount(4)))
+}
+
+func (u *Unserializer) decodeUint(v reflect.Value) {
+	u.decodeUint64(v)
+}
+
+func (u *Unserializer) decodeInt(v reflect.Value) {
+	u.decodeInt64(v)
+}
+
+func (u *Unserializer) decodeInterface(v reflect.Value) {
+	v.Set(u.decode())
+}
+
+func (u *Unserializer) decodePointer(elemType reflect.Type, v reflect.Value) {
+	meta := u.readByte()
+	if meta & meta_nil != 0 {
+		return
+	}
+	elemValue := u.decodeValue(elemType)
+	v.Set(u.ptrTo(elemType, elemValue))
+}
+
+func (u *Unserializer) ptrTo(t reflect.Type, v reflect.Value) reflect.Value {
+	p := reflect.New(t)
+	p.Elem().Set(v)
+	return p
+}
+
+func (u *Unserializer) decodeLength() int {
+	return int(u.decodeCount(4))
+}
+
+func (u *Unserializer) decodeCount(sizeBits int) uint64 {
+	length := u.top() >> (8 - sizeBits)
+	bytes := u.readBytes(int(length))
+	first := bytes[0]
+	bytes[0] &= (bytes[0] << sizeBits) >> sizeBits
+	cnt := bytesToUint(bytes)
+	bytes[0] = first
+	return cnt
+}
+
+func (u *Unserializer) top() byte {
+	return u.data[u.pos]
+}
+
+func (u *Unserializer) readByte() byte {
+	u.pos++
+	if u.pos > u.size {
+		panic(io.ErrUnexpectedEOF)
+	}
+	return u.data[u.pos-1]
+}
+
+func (u *Unserializer) readBytes(count int) []byte {
+	u.pos += count
+	if u.pos > u.size {
+		panic(io.ErrUnexpectedEOF)
+	}
+	return u.data[u.pos-count : u.pos]
+}
+
+func Unserialize(data []byte, options ...any) (any, error) {
+	return NewUnserializer().
+		WithOptions(options).
+		Decode(data)
+}
+
 /*import (
 	"errors"
 	"fmt"

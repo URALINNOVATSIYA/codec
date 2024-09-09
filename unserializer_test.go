@@ -1,63 +1,60 @@
 package codec
 
-/*import (
-	"bytes"
-	"errors"
+import (
 	"math"
 	"reflect"
 	"strings"
-	"sync"
 	"testing"
-	"text/scanner"
-	"unsafe"
-
-	"github.com/URALINNOVATSIYA/codec/tstpkg"
 )
 
-func TestNilUnserialization(t *testing.T) {
+func TestUnserialization_Nil(t *testing.T) {
+	reg, _ := registry()
 	var items = []any{
 		nil,
 	}
-	checkUnserializer(items, t)
+	checkDecodedValue(items, reg, t)
 }
 
-func TestBoolUnserialization(t *testing.T) {
-	var items = []any{
+func TestUnserialization_Bool(t *testing.T) {
+	reg, _ := registry()
+	var values = []any{
 		false,
 		true,
 		testBool(false),
 		testBool(true),
 	}
-	checkUnserializer(items, t)
+	checkDecodedValue(values, reg, t)
 }
 
-func TestStringUnserialization(t *testing.T) {
-	var items = []any{
-		// String
+func TestUnserialization_String(t *testing.T) {
+	reg, _ := registry()
+	var values = []any{
 		"",
 		"a",
 		"ab",
 		strings.Repeat("a", 256),
 		strings.Repeat("a", 65536),
-		testString(""),
-		testString("abcdef"),
+		testStr(""),
+		testStr("abcdef"),
 	}
-	checkUnserializer(items, t)
+	checkDecodedValue(values, reg, t)
 }
 
-func TestUint8Unserialization(t *testing.T) {
-	var items = []any{
-		byte(0),
-		byte(1),
-		byte(255),
+func TestUnserialization_Uint8(t *testing.T) {
+	reg, _ := registry()
+	var values = []any{
+		uint8(0),
+		uint8(1),
+		uint8(255),
 		testUint8(0),
 		testUint8(255),
 	}
-	checkUnserializer(items, t)
+	checkDecodedValue(values, reg, t)
 }
 
-func TestInt8Unserialization(t *testing.T) {
-	var items = []any{
+func TestUnserialization_Int8(t *testing.T) {
+	reg, _ := registry()
+	var values = []any{
 		int8(0),
 		int8(1),
 		int8(-1),
@@ -66,11 +63,12 @@ func TestInt8Unserialization(t *testing.T) {
 		testInt8(0),
 		testInt8(-128),
 	}
-	checkUnserializer(items, t)
+	checkDecodedValue(values, reg, t)
 }
 
-func TestUint16Unserialization(t *testing.T) {
-	var items = []any{
+func TestUnserialization_Uint16(t *testing.T) {
+	reg, _ := registry()
+	var values = []any{
 		uint16(0),
 		uint16(1),
 		uint16(256),
@@ -78,11 +76,12 @@ func TestUint16Unserialization(t *testing.T) {
 		testUint16(0),
 		testUint16(65535),
 	}
-	checkUnserializer(items, t)
+	checkDecodedValue(values, reg, t)
 }
 
-func TestInt16Unserialization(t *testing.T) {
-	var items = []any{
+func TestUnserialization_Int16(t *testing.T) {
+	reg, _ := registry()
+	var values = []any{
 		int16(0),
 		int16(1),
 		int16(-1),
@@ -93,11 +92,12 @@ func TestInt16Unserialization(t *testing.T) {
 		testInt16(0),
 		testInt16(-32768),
 	}
-	checkUnserializer(items, t)
+	checkDecodedValue(values, reg, t)
 }
 
-func TestUint32Unserialization(t *testing.T) {
-	var items = []any{
+func TestUnserialization_Uint32(t *testing.T) {
+	reg, _ := registry()
+	var values = []any{
 		uint32(0),
 		uint32(1),
 		uint32(256),
@@ -107,11 +107,12 @@ func TestUint32Unserialization(t *testing.T) {
 		testUint32(0),
 		testUint32(12345678),
 	}
-	checkUnserializer(items, t)
+	checkDecodedValue(values, reg, t)
 }
 
-func TestInt32Unserialization(t *testing.T) {
-	var items = []any{
+func TestUnserialization_Int32(t *testing.T) {
+	reg, _ := registry()
+	var values = []any{
 		int32(0),
 		int32(1),
 		int32(-1),
@@ -126,11 +127,12 @@ func TestInt32Unserialization(t *testing.T) {
 		testInt32(0),
 		testInt32(-12345678),
 	}
-	checkUnserializer(items, t)
+	checkDecodedValue(values, reg, t)
 }
 
-func TestUint64Unserialization(t *testing.T) {
-	var items = []any{
+func TestUnserialization_Uint64(t *testing.T) {
+	reg, _ := registry()
+	var values = []any{
 		uint64(0),
 		uint64(1),
 		uint64(256),
@@ -143,11 +145,12 @@ func TestUint64Unserialization(t *testing.T) {
 		testUint64(0),
 		testUint64(1234567890),
 	}
-	checkUnserializer(items, t)
+	checkDecodedValue(values, reg, t)
 }
 
-func TestInt64Unserialization(t *testing.T) {
-	var items = []any{
+func TestUnserialization_Int64(t *testing.T) {
+	reg, _ := registry()
+	var values = []any{
 		int64(0),
 		int64(1),
 		int64(-1),
@@ -168,11 +171,12 @@ func TestInt64Unserialization(t *testing.T) {
 		testInt64(0),
 		testInt64(-1234567890),
 	}
-	checkUnserializer(items, t)
+	checkDecodedValue(values, reg, t)
 }
 
-func TestUintUnserialization(t *testing.T) {
-	var items = []any{
+func TestUnserialization_Uint(t *testing.T) {
+	reg, _ := registry()
+	var values = []any{
 		uint(0),
 		uint(1),
 		uint(256),
@@ -184,11 +188,12 @@ func TestUintUnserialization(t *testing.T) {
 		testUint(0),
 		testUint(1234567),
 	}
-	checkUnserializer(items, t)
+	checkDecodedValue(values, reg, t)
 }
 
-func TestIntUnserialization(t *testing.T) {
-	var items = []any{
+func TestUnserialization_Int(t *testing.T) {
+	reg, _ := registry()
+	var values = []any{
 		0,
 		1,
 		-1,
@@ -204,10 +209,11 @@ func TestIntUnserialization(t *testing.T) {
 		testInt(0),
 		testInt(-123456),
 	}
-	checkUnserializer(items, t)
+	checkDecodedValue(values, reg, t)
 }
 
-func TestFloat32Unserialization(t *testing.T) {
+func TestUnserialization_Float32(t *testing.T) {
+	reg, _ := registry()
 	var items = []any{
 		float32(0),
 		float32(1),
@@ -219,10 +225,11 @@ func TestFloat32Unserialization(t *testing.T) {
 		testFloat32(0),
 		testFloat32(1.23),
 	}
-	checkUnserializer(items, t)
+	checkDecodedValue(items, reg, t)
 }
 
-func TestFloat64Unserialization(t *testing.T) {
+func TestUnserialization_Float64(t *testing.T) {
+	reg, _ := registry()
 	var items = []any{
 		float64(0),
 		float64(1),
@@ -234,8 +241,93 @@ func TestFloat64Unserialization(t *testing.T) {
 		testFloat64(0),
 		testFloat64(-1.23),
 	}
-	checkUnserializer(items, t)
+	checkDecodedValue(items, reg, t)
 }
+
+func TestUnserialization_Pointer(t *testing.T) {
+	reg, _ := registry()
+	values := []any{
+		(*any)(nil),
+		func() any {
+			b := true
+			return &b
+		}(),
+		func() any {
+			b := false
+			return &b
+		}(),
+		func() any {
+			s := ""
+			return &s
+		}(),
+		func() any {
+			s := "abc"
+			return &s
+		}(),
+		func() any {
+			var n0, n1, n2 any
+			n2 = -123
+			n1 = &n2
+			n0 = &n1
+			return n0
+		}(),
+	}
+	// *[]uint
+	/*v5 := []uint{1, 2, 3}
+	values[5] = &v5
+	// testPtr
+	b := true
+	v6 := testPtr(&b)
+	values[6] = v6
+	// testRectPtr
+	values[7] = testRecPtr(nil)
+	// nil ptr
+	var s *string
+	values[8] = s
+	// cyclic refs
+	var n0, n1 any
+	n1 = &n0
+	n0 = &n1
+	values[9] = n0
+    // Complext pointers
+	lst := newLst()
+	nd1 := lst.push()
+	nd2 := lst.push()
+	nd1.next = nil
+	nd1.lst = nil
+	nd2.next = nil
+	lst.root.next = nil
+	values[10] = nd1*/
+	checkDecodedValue(values, reg, t)
+}
+
+func checkDecodedValue(values []any, typeRegistry *TypeRegistry, t *testing.T) {
+	serializer := NewSerializer().WithTypeRegistry(typeRegistry)
+	unserializer := NewUnserializer().WithTypeRegistry(typeRegistry)
+	for _, expected := range values {
+		data := serializer.Encode(expected)
+		actual, err := unserializer.Decode(data)
+		if err != nil {
+			t.Errorf("Unserializer::decode(%#v) raises error: %q", expected, err)
+		} else if !reflect.DeepEqual(expected, actual) {
+			t.Errorf("Unserializer::decode(%#v) returns wrong value %#v", expected, actual)
+		}
+	}
+}
+
+/*import (
+	"bytes"
+	"errors"
+	"math"
+	"reflect"
+	"strings"
+	"sync"
+	"testing"
+	"text/scanner"
+	"unsafe"
+
+	"github.com/URALINNOVATSIYA/codec/tstpkg"
+)
 
 func TestComplex64Unserialization(t *testing.T) {
 	var items = []any{

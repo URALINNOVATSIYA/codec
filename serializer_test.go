@@ -976,7 +976,7 @@ func TestSerialization_Array(t *testing.T) {
 			*(*[256]byte)(bytes.Repeat([]byte{1}, 256)),
 			append(
 				[]byte{version, id([256]byte{}), meta_fixed, 0b0010_0000 | 1, 0, 0b0001_0000},
-				bytes.Repeat([]byte{1}, 256)...
+				bytes.Repeat([]byte{1}, 256)...,
 			),
 		},
 		{
@@ -994,7 +994,7 @@ func TestSerialization_Array(t *testing.T) {
 		{
 			[4]any{uint16(1), false, 1.23, "abc"},
 			[]byte{
-				version, 
+				version,
 				id([4]any{}), meta_fixed, 0b0001_0000 | 4, 0b0001_0000,
 				id(uint16(0)), 0b0100_0000 | 1,
 				id(false), 0,
@@ -1063,14 +1063,14 @@ func TestSerialization_StructDefaultCodingMode(t *testing.T) {
 			[]byte{
 				version,
 				id((*testStruct)(nil)), 0, // *testStruct
-				0b0001_0000 | 7,           // field count
+				0b0001_0000 | 7,                        // field count
 				id(""), 0b0001_0000 | 3, 'a', 'b', 'c', // F1
-				id(false), 1,                           // F2
+				id(false), 1, // F2
 				id((*testStruct)(nil)), 0, meta_ref, 0b0010_0000 | 1, // F3 = &testStruct
 				interfaceId(reg), id((*string)(nil)), 0, meta_ref, 0b0010_0000 | 2, // F4 = &F1
-				id(0), 0b0010_0000 | 2, 130,                            // f5
-				id(""), 0b0001_0000 | 1, '#',                           // f6
-				id((*testStruct)(nil)), meta_nil,                       // f7
+				id(0), 0b0010_0000 | 2, 130, // f5
+				id(""), 0b0001_0000 | 1, '#', // f6
+				id((*testStruct)(nil)), meta_nil, // f7
 			},
 		},
 		{
@@ -1131,21 +1131,21 @@ func TestSerialization_StructIndexCodingMode(t *testing.T) {
 			[]byte{
 				version,
 				id((*testStruct)(nil)), 0, // *testStruct
-				0b0001_0000 | 7,           // field count
+				0b0001_0000 | 7,                        // field count
 				0b0001_0000,                            // F1 index = 0
 				id(""), 0b0001_0000 | 3, 'a', 'b', 'c', // F1
-				0b0001_0000 | 1,                        // F2 index = 1
-				id(false), 1,                           // F2
-				0b0001_0000 | 2,                        // F3 index = 2
+				0b0001_0000 | 1, // F2 index = 1
+				id(false), 1,    // F2
+				0b0001_0000 | 2,                                      // F3 index = 2
 				id((*testStruct)(nil)), 0, meta_ref, 0b0010_0000 | 1, // F3 = &testStruct
 				0b0001_0000 | 3,                                                    // F4 index = 3
 				interfaceId(reg), id((*string)(nil)), 0, meta_ref, 0b0010_0000 | 2, // F4 = &F1
-				0b0001_0000 | 4,                                        // f5 index = 4
-				id(0), 0b0010_0000 | 2, 130,                            // f5
-				0b0001_0000 | 5,                                        // f6 index = 5
-				id(""), 0b0001_0000 | 1, '#',                           // f6
-				0b0001_0000 | 6,                                        // f7 index = 6
-				id((*testStruct)(nil)), meta_nil,                       // f7
+				0b0001_0000 | 4,             // f5 index = 4
+				id(0), 0b0010_0000 | 2, 130, // f5
+				0b0001_0000 | 5,              // f6 index = 5
+				id(""), 0b0001_0000 | 1, '#', // f6
+				0b0001_0000 | 6,                  // f7 index = 6
+				id((*testStruct)(nil)), meta_nil, // f7
 			},
 		},
 		{
@@ -1208,20 +1208,20 @@ func TestSerialization_StructNameCodingMode(t *testing.T) {
 				version,
 				id((*testStruct)(nil)), 0, // *testStruct
 				0b0001_0000 | 7,           // field count
-				0b0001_0000 | 2, 'F', '1',              // F1 name
+				0b0001_0000 | 2, 'F', '1', // F1 name
 				id(""), 0b0001_0000 | 3, 'a', 'b', 'c', // F1
-				0b0001_0000 | 2, 'F', '2',              // F2 name
-				id(false), 1,                           // F2
-				0b0001_0000 | 2, 'F', '3',              // F3 name
+				0b0001_0000 | 2, 'F', '2', // F2 name
+				id(false), 1, // F2
+				0b0001_0000 | 2, 'F', '3', // F3 name
 				id((*testStruct)(nil)), 0, meta_ref, 0b0010_0000 | 1, // F3 = &testStruct
-				0b0001_0000 | 2, 'F', '4',                                          // F4 name
+				0b0001_0000 | 2, 'F', '4', // F4 name
 				interfaceId(reg), id((*string)(nil)), 0, meta_ref, 0b0010_0000 | 2, // F4 = &F1
-				0b0001_0000 | 2, 'f', '5',                              // f5 name
-				id(0), 0b0010_0000 | 2, 130,                            // f5
-				0b0001_0000 | 2, 'f', '6',                              // f6 name
-				id(""), 0b0001_0000 | 1, '#',                           // f6
-				0b0001_0000 | 2, 'f', '7',                              // f7 name
-				id((*testStruct)(nil)), meta_nil,                       // f7
+				0b0001_0000 | 2, 'f', '5', // f5 name
+				id(0), 0b0010_0000 | 2, 130, // f5
+				0b0001_0000 | 2, 'f', '6', // f6 name
+				id(""), 0b0001_0000 | 1, '#', // f6
+				0b0001_0000 | 2, 'f', '7', // f7 name
+				id((*testStruct)(nil)), meta_nil, // f7
 			},
 		},
 		{
@@ -1229,8 +1229,8 @@ func TestSerialization_StructNameCodingMode(t *testing.T) {
 			[]byte{
 				version,
 				id(reflect.ValueOf(errors.New("")).Interface()), 0, // &errors.errorString
-				0b0001_0000 | 1,                        // errors.errorString
-				0b0001_0000 | 1, 's',                   // field name
+				0b0001_0000 | 1,      // errors.errorString
+				0b0001_0000 | 1, 's', // field name
 				id(""), 0b0001_0000 | 3, 'e', 'r', 'r', // "err"
 			},
 		},
@@ -1252,11 +1252,11 @@ func TestSerialization_StructNameCodingMode(t *testing.T) {
 					f2 byte
 				}{}), 0b0001_0000 | 3,
 				0b0001_0000 | 1, '_', 0b0001_0000, // _ name + index
-				id(""), 0b0001_0000,               // _ value
-				0b0001_0000 | 2, 'f', '1',         // f1 name
-				id(false), 1,                      // f1 value
-				0b0001_0000 | 2, 'f', '2',         // f2 name
-				id(byte(0)), 123,                  // f2 value
+				id(""), 0b0001_0000, // _ value
+				0b0001_0000 | 2, 'f', '1', // f1 name
+				id(false), 1, // f1 value
+				0b0001_0000 | 2, 'f', '2', // f2 name
+				id(byte(0)), 123, // f2 value
 			},
 		},
 	}
@@ -1321,8 +1321,8 @@ func TestSerialization_Reference(t *testing.T) {
 				return x
 			}(),
 			[]byte{
-				version, 
-				id((*any)(nil)), 0,       // pointer type (pointer is not nil)
+				version,
+				id((*any)(nil)), 0, // pointer type (pointer is not nil)
 				meta_ref, 0b0010_0000, // pointer value (referenced value)
 			},
 		},
@@ -1336,7 +1336,7 @@ func TestSerialization_Reference(t *testing.T) {
 			[]byte{
 				version,
 				id((*any)(nil)), 0, // x1
-				id((*any)(nil)), 0, // x2  
+				id((*any)(nil)), 0, // x2
 				meta_ref, 0b0010_0000, // referenced value
 			},
 		},
@@ -1362,11 +1362,11 @@ func TestSerialization_Reference(t *testing.T) {
 			}(),
 			[]byte{
 				version,
-				id(([]any)(nil)), 0, 0b0001_0000 | 3, 
+				id(([]any)(nil)), 0, 0b0001_0000 | 3,
 				0b0001_0000 | 2, 0b0001_0000 | 1, 0b0001_0000 | 2, // list of ref indexes
-				id((*any)(nil)), 0, id(false), 1,                  // x[0] = &x[1]
-				meta_ref, 0b0010_0000 | 3,                      // x[1] = true
-				meta_ref, 0b0010_0000 | 2,                      // x[2] = &x[1]
+				id((*any)(nil)), 0, id(false), 1, // x[0] = &x[1]
+				meta_ref, 0b0010_0000 | 3, // x[1] = true
+				meta_ref, 0b0010_0000 | 2, // x[2] = &x[1]
 			},
 		},
 		{
@@ -1381,9 +1381,9 @@ func TestSerialization_Reference(t *testing.T) {
 			}(),
 			[]byte{
 				version,
-				id((**any)(nil)), 0,   // **any
+				id((**any)(nil)), 0, // **any
 				0,                     // *any
-				meta_ref, 0b0010_0000, // ref to **any 
+				meta_ref, 0b0010_0000, // ref to **any
 			},
 		},
 		{
@@ -1398,9 +1398,9 @@ func TestSerialization_Reference(t *testing.T) {
 			}(),
 			[]byte{
 				version,
-				id((**any)(nil)), 0,       // **any &x2
-				0,                         // *any  x2 = &x1
-				id((***any)(nil)), 0,      // ***any x1 = &x3
+				id((**any)(nil)), 0, // **any &x2
+				0,                    // *any  x2 = &x1
+				id((***any)(nil)), 0, // ***any x1 = &x3
 				0,                         // **any = x3
 				meta_ref, 0b0010_0000 | 1, // ref to x2
 			},

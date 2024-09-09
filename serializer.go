@@ -370,8 +370,8 @@ func (s *Serializer) encodeSerializable(v reflect.Value) []byte {
 	return append(b, body...)
 }
 
-func (s *Serializer) encodeCount(length int) []byte {
-	return asBytesWithSize(uint64(length), 4)
+func (s *Serializer) encodeCount(cnt int) []byte {
+	return asBytesWithSize(uint64(cnt), 4)
 }
 
 /*func (s *Serializer) valueAddress(v reflect.Value) reflect.Value {
