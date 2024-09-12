@@ -4,6 +4,8 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"math"
+	"math/bits"
 	"reflect"
 )
 
@@ -13,6 +15,7 @@ type Unserializer struct {
 	size             int
 	data             []byte
 	refs             map[uint32]reflect.Value
+	rels             map[uint32]uint32
 	typeRegistry     *TypeRegistry
 	structCodingMode byte
 }
@@ -58,11 +61,12 @@ func (u *Unserializer) Decode(data []byte) (value any, err error) {
 			err = errors.New(e.(string))
 		}
 	}()
-	u.cnt = 0
+	u.cnt = math.MaxUint32
 	u.pos = 1 // skip version for now
 	u.data = data
 	u.size = len(data)
 	u.refs = make(map[uint32]reflect.Value)
+	u.rels = make(map[uint32]uint32)
 	if v := u.decode(); v.IsValid() {
 		return v.Interface(), nil
 	}
@@ -70,6 +74,9 @@ func (u *Unserializer) Decode(data []byte) (value any, err error) {
 }
 
 func (u *Unserializer) decode() reflect.Value {
+	if u.top() == meta_ref {
+		return u.decodeReference()
+	}
 	return u.decodeValue(u.decodeType())
 }
 
@@ -80,8 +87,10 @@ func (u *Unserializer) decodeType() reflect.Type {
 func (u *Unserializer) decodeValue(t reflect.Type) reflect.Value {
 	var v reflect.Value
 	if t != nil {
-		v = reflect.New(t).Elem() // zero value of type t
+		v = reflect.New(t).Elem() // addressable zero value of type t
 	}
+	u.cnt++
+	u.refs[u.cnt] = v
 	switch v.Kind() {
 	case reflect.Bool:
 		u.decodeBool(v)
@@ -107,6 +116,14 @@ func (u *Unserializer) decodeValue(t reflect.Type) reflect.Value {
 		u.decodeUint(v)	
 	case reflect.Int:
 		u.decodeInt(v)
+	case reflect.Float32:
+		u.decodeFloat32(v)
+	case reflect.Float64:
+		u.decodeFloat64(v)
+	case reflect.Complex64:
+		u.decodeComplex64(v)
+	case reflect.Complex128:
+		u.decodeComplex128(v)				
 	case reflect.Interface:
 		u.decodeInterface(v)
 	case reflect.Pointer:
@@ -163,6 +180,34 @@ func (u *Unserializer) decodeInt(v reflect.Value) {
 	u.decodeInt64(v)
 }
 
+func (u *Unserializer) decodeFloat32(v reflect.Value) {
+	v.SetFloat(float64(u.readFloat32()))
+}
+
+func (u *Unserializer) readFloat32() float32 {
+	return math.Float32frombits(bits.ReverseBytes32(uint32(u.decodeCount(3))))
+}
+
+func (u *Unserializer) decodeFloat64(v reflect.Value) {
+	v.SetFloat(u.readFloat64())
+}
+
+func (u *Unserializer) readFloat64() float64 {
+	return math.Float64frombits(bits.ReverseBytes64(u.decodeCount(4)))
+}
+
+func (u *Unserializer) decodeComplex64(v reflect.Value) {
+	r := u.readFloat32()
+	i := u.readFloat32()
+	v.SetComplex(complex128(complex(r, i)))
+}
+
+func (u *Unserializer) decodeComplex128(v reflect.Value) {
+	r := u.readFloat64()
+	i := u.readFloat64()
+	v.SetComplex(complex(r, i))
+}
+
 func (u *Unserializer) decodeInterface(v reflect.Value) {
 	v.Set(u.decode())
 }
@@ -172,8 +217,29 @@ func (u *Unserializer) decodePointer(elemType reflect.Type, v reflect.Value) {
 	if meta & meta_nil != 0 {
 		return
 	}
-	elemValue := u.decodeValue(elemType)
+	var elemValue reflect.Value
+	cnt := u.cnt
+	if meta & meta_prf != 0 {
+		elemValue = u.decodeReference()
+	} else {
+		elemValue = u.decodeValue(elemType)
+	}
 	v.Set(u.ptrTo(elemType, elemValue))
+	if cnt, exists := u.rels[cnt]; exists {
+		u.refs[cnt].Elem().Set(v)
+	}
+}
+
+func (u *Unserializer) decodeReference() reflect.Value {
+	if u.top() == meta_ref {
+		_ = u.readByte() // skip ref type if any
+	}
+	cnt := uint32(u.decodeCount(3))
+	if v, exists := u.refs[cnt]; exists {
+		u.rels[cnt] = u.cnt
+		return v
+	}
+	panic(fmt.Errorf("reference #%d is incoorrect", u.cnt))
 }
 
 func (u *Unserializer) ptrTo(t reflect.Type, v reflect.Value) reflect.Value {
@@ -190,7 +256,7 @@ func (u *Unserializer) decodeCount(sizeBits int) uint64 {
 	length := u.top() >> (8 - sizeBits)
 	bytes := u.readBytes(int(length))
 	first := bytes[0]
-	bytes[0] &= (bytes[0] << sizeBits) >> sizeBits
+	bytes[0] = (bytes[0] << sizeBits) & 0b1111_1111 >> sizeBits
 	cnt := bytesToUint(bytes)
 	bytes[0] = first
 	return cnt

@@ -301,16 +301,59 @@ func TestUnserialization_Pointer(t *testing.T) {
 	checkDecodedValue(values, reg, t)
 }
 
+func TestUnserialization_Reference(t *testing.T) {
+	reg, _ := registry()
+	values := []any{
+		func() any {
+			var x any
+			x = &x
+			return x
+		}(),
+		func() any {
+			var x0, x1 any
+			x0 = &x1
+			x1 = &x0
+			return x0
+		}(),
+		func() any {
+			var x0, x1, x2 any
+			x0 = &x1
+			x1 = &x2
+			x2 = &x0
+			return x0
+		}(),
+		func() any {
+			var x1 any
+			var x2 *any
+			var x3 **any
+			x2 = &x1
+			x3 = &x2
+			x1 = x3
+			return x3
+		}(),
+		func() any {
+			var x1 any
+			var x2 *any
+			var x3 **any
+			x2 = &x1
+			x3 = &x2
+			x1 = &x3
+			return x3
+		}(),
+	}
+	checkDecodedValue(values, reg, t)
+}
+
 func checkDecodedValue(values []any, typeRegistry *TypeRegistry, t *testing.T) {
 	serializer := NewSerializer().WithTypeRegistry(typeRegistry)
 	unserializer := NewUnserializer().WithTypeRegistry(typeRegistry)
-	for _, expected := range values {
+	for i, expected := range values {
 		data := serializer.Encode(expected)
 		actual, err := unserializer.Decode(data)
 		if err != nil {
-			t.Errorf("Unserializer::decode(%#v) raises error: %q", expected, err)
+			t.Errorf("Test #%d: Decode(%#v) raises error: %q", i+1, expected, err)
 		} else if !reflect.DeepEqual(expected, actual) {
-			t.Errorf("Unserializer::decode(%#v) returns wrong value %#v", expected, actual)
+			t.Errorf("Test #%d: Decode(%#v) returns wrong value %#v", i+1, expected, actual)
 		}
 	}
 }

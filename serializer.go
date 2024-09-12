@@ -12,6 +12,7 @@ const (
 	meta_ref   byte = 0b0000_0000 // pseudo type for referenced values
 	meta_nil   byte = 0b0001_0000 // determines whether underlying value is nil
 	meta_fixed byte = 0b0010_0000 // for lists that are arrays (i.e. have fixed size)
+	meta_prf   byte = 0b0100_0000 //
 )
 
 type Serializer struct {
@@ -89,14 +90,6 @@ func (s *Serializer) encodeValue(v reflect.Value) (bytes []byte, isReferencedVal
 		bytes = s.encodeBool(v)
 	case reflect.String:
 		bytes = s.encodeString(v)
-	case reflect.Float32:
-		bytes = s.encodeFloat32(v)
-	case reflect.Float64:
-		bytes = s.encodeFloat64(v)
-	case reflect.Complex64:
-		bytes = s.encodeComplex64(v)
-	case reflect.Complex128:
-		bytes = s.encodeComplex128(v)
 	case reflect.Uint8:
 		bytes = s.encodeUint8(v)
 	case reflect.Int8:
@@ -117,6 +110,14 @@ func (s *Serializer) encodeValue(v reflect.Value) (bytes []byte, isReferencedVal
 		bytes = s.encodeUint(v)
 	case reflect.Int:
 		bytes = s.encodeInt(v)
+	case reflect.Float32:
+		bytes = s.encodeFloat32(v)
+	case reflect.Float64:
+		bytes = s.encodeFloat64(v)
+	case reflect.Complex64:
+		bytes = s.encodeComplex64(v)
+	case reflect.Complex128:
+		bytes = s.encodeComplex128(v)	
 	case reflect.Uintptr:
 		bytes = s.encodeUintptr(v)
 	case reflect.UnsafePointer:
@@ -154,28 +155,6 @@ func (s *Serializer) encodeBool(v reflect.Value) []byte {
 
 func (s *Serializer) encodeString(v reflect.Value) []byte {
 	return append(s.encodeCount(v.Len()), v.String()...)
-}
-
-func (s *Serializer) encodeFloat32(v reflect.Value) []byte {
-	return asBytesWithSize(uint64(bits.ReverseBytes32(math.Float32bits(float32(v.Float())))), 3)
-}
-
-func (s *Serializer) encodeFloat64(v reflect.Value) []byte {
-	return asBytesWithSize(bits.ReverseBytes64(math.Float64bits(v.Float())), 4)
-}
-
-func (s *Serializer) encodeComplex64(v reflect.Value) []byte {
-	c := v.Complex()
-	r := s.encodeFloat32(reflect.ValueOf(float32(real(c))))
-	i := s.encodeFloat32(reflect.ValueOf(float32(imag(c))))
-	return append(r, i...)
-}
-
-func (s *Serializer) encodeComplex128(v reflect.Value) []byte {
-	c := v.Complex()
-	r := s.encodeFloat64(reflect.ValueOf(real(c)))
-	i := s.encodeFloat64(reflect.ValueOf(imag(c)))
-	return append(r, i...)
 }
 
 func (s *Serializer) encodeUint8(v reflect.Value) []byte {
@@ -218,6 +197,28 @@ func (s *Serializer) encodeInt(v reflect.Value) []byte {
 	return s.encodeInt64(v)
 }
 
+func (s *Serializer) encodeFloat32(v reflect.Value) []byte {
+	return asBytesWithSize(uint64(bits.ReverseBytes32(math.Float32bits(float32(v.Float())))), 3)
+}
+
+func (s *Serializer) encodeFloat64(v reflect.Value) []byte {
+	return asBytesWithSize(bits.ReverseBytes64(math.Float64bits(v.Float())), 4)
+}
+
+func (s *Serializer) encodeComplex64(v reflect.Value) []byte {
+	c := v.Complex()
+	r := s.encodeFloat32(reflect.ValueOf(float32(real(c))))
+	i := s.encodeFloat32(reflect.ValueOf(float32(imag(c))))
+	return append(r, i...)
+}
+
+func (s *Serializer) encodeComplex128(v reflect.Value) []byte {
+	c := v.Complex()
+	r := s.encodeFloat64(reflect.ValueOf(real(c)))
+	i := s.encodeFloat64(reflect.ValueOf(imag(c)))
+	return append(r, i...)
+}
+
 func (s *Serializer) encodeUintptr(v reflect.Value) []byte {
 	return s.encodeUint64(v)
 }
@@ -257,11 +258,12 @@ func (s *Serializer) encodeList(v reflect.Value) []byte {
 	values := []byte{}
 	refs := []byte{}
 	for i := 0; i < length; i++ {
-		value, refVal := s.encodeValue(v.Index(i))
-		values = append(values, value...)
-		if refVal {
+		value, isRefVal := s.encodeValue(v.Index(i))
+		if isRefVal {
+			value = value[1:]
 			refs = append(refs, s.encodeCount(i)...)
 		}
+		values = append(values, value...)
 	}
 	b = append(b, s.encodeCount(length)...)
 	b = append(b, s.encodeCount(len(refs))...)
@@ -281,19 +283,21 @@ func (s *Serializer) encodeMap(v reflect.Value) []byte {
 	for iter.Next() {
 		key, keyRefVal := s.encodeValue(iter.Key())
 		value, valueRefVal := s.encodeValue(iter.Value())
-		values = append(values, key...)
-		values = append(values, value...)
 		f := byte(0)
 		if valueRefVal {
 			f |= 1
+			value = value[1:]
 		}
 		if keyRefVal {
 			f |= 2
+			key = key[1:]
 		}
 		if f != 0 {
 			refs = append(refs, f)
 			refs = append(refs, s.encodeCount(i)...)
 		}
+		values = append(values, key...)
+		values = append(values, value...)
 		i++
 	}
 	b := append([]byte{0}, s.encodeCount(v.Len())...)
@@ -341,11 +345,11 @@ func (s *Serializer) encodePointer(v reflect.Value) []byte {
 	if v.IsNil() {
 		return []byte{meta_nil}
 	}
-	value, _ := s.encodeValue(v.Elem())
-	//if refVal {
-	//value[0] |= meta_refval
-	//	return value //append([]byte{meta_ref}, value...)
-	//}
+	value, isRefVal := s.encodeValue(v.Elem())
+	if isRefVal {
+		value[0] = meta_prf
+		return value
+	}
 	return append([]byte{0}, value...)
 }
 
