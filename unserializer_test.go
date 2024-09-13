@@ -1,10 +1,12 @@
 package codec
 
 import (
+	"bytes"
 	"math"
 	"reflect"
 	"strings"
 	"testing"
+	"unsafe"
 )
 
 func TestUnserialization_Nil(t *testing.T) {
@@ -244,10 +246,129 @@ func TestUnserialization_Float64(t *testing.T) {
 	checkDecodedValue(items, reg, t)
 }
 
+func TestUnserialization_Complex64(t *testing.T) {
+	reg, _ := registry()
+	var items = []any{
+		complex(float32(0), float32(0)),
+		complex(float32(1), float32(0)),
+		complex(float32(0), float32(1)),
+		complex(float32(1.23), float32(123)),
+		complex(float32(123), float32(1.23)),
+		complex(float32(1.23), float32(-1.23)),
+		complex(float32(-1.23), float32(1.23)),
+		testComplex64(complex(float32(1.23), float32(2))),
+	}
+	checkDecodedValue(items, reg, t)
+}
+
+func TestUnserialization_Complex128(t *testing.T) {
+	reg, _ := registry()
+	var items = []any{
+		complex(float64(0), float64(0)),
+		complex(float64(1), float64(0)),
+		complex(float64(0), float64(1)),
+		complex(1.23, float64(123)),
+		complex(float64(123), 1.23),
+		complex(1.23, -1.23),
+		complex(-1.23, 1.23),
+		testComplex128(complex(-1.23, 2.34)),
+	}
+	checkDecodedValue(items, reg, t)
+}
+
+func TestUnserialization_Uintptr(t *testing.T) {
+	reg, _ := registry()
+	var items = []any{
+		uintptr(123456),
+		testUintptr(1234567),
+	}
+	checkDecodedValue(items, reg, t)
+}
+
+func TestUnserialization_UnsafePointer(t *testing.T) {
+	reg, _ := registry()
+	var items = []any{
+		unsafe.Pointer(nil),
+		unsafe.Pointer(uintptr(123456)),
+		testUnsafePointer(nil),
+		testUnsafePointer(uintptr(1234567)),
+	}
+	checkDecodedValue(items, reg, t)
+}
+
+func TestUnserialization_Func(t *testing.T) {
+	reg, _ := registry()
+	var items = []any{
+		(func(bool, uint))(nil),
+		Serialize,
+		Unserialize,
+	}
+	checkDecodedValue(items, reg, t)
+}
+
+func TestUnserialization_Chan(t *testing.T) {
+	reg, _ := registry()
+	var items = []any{
+		(chan<- []int8)(nil),
+		make(chan int),
+		make(chan<- bool, 1),
+		make(<-chan *testStruct, 2),
+		make(testChan, 10),
+	}
+	checkDecodedValue(items, reg, t)
+}
+
+func TestUnserialization_Slice(t *testing.T) {
+	reg, _ := registry()
+	var items = []any{
+		([]byte)(nil),
+		[]int{},
+		[]int{1, -1, 0, 1234, -1234},
+		[]uint{},
+		[]uint{1, 0, 1234, math.MaxUint},
+		[]string{"a", "ab", "abc"},
+		[]bool{true, false},
+		[]any{1, true, 1.23, "abc"},
+		[][]bool{{false}, {}, {true, false, true}},
+		testSlice{"a", "ab", "abc"},
+		testRecSlice{testRecSlice{}, testRecSlice{testRecSlice{}}},
+	}
+	checkDecodedValue(items, reg, t)
+}
+
+func TestUnserialization_Array(t *testing.T) {
+	reg, _ := registry()
+	var items = []any{
+		[0]int{},
+		[1]int{-1},
+		[3]uint{1, 2, 3},
+		[4]bool{true, false, false, true},
+		[2][2]string{{"a", "b"}, {"c", "d"}},
+		[3][]bool{{false}, {}, {true, false, true}},
+		*(*[256]byte)(bytes.Repeat([]byte{1}, 256)),
+		testArray{-1, 2, -3},
+	}
+	checkDecodedValue(items, reg, t)
+}
+
+func TestUnserialization_Map(t *testing.T) {
+	reg, _ := registry()
+	var items = []any{
+		(map[byte]byte)(nil),
+		map[string]bool{"a": true, "b": false},
+		map[int32]int8{-1: 2, 3: -4, -123456: -128},
+		map[byte]map[int]bool{5: {-7: true, -9: false}, 1: nil, 0: {}, 100: {2: false}},
+		testMap{"a": 1, "b": 2, "c": 3},
+		testRecMap{8: testRecMap{2: testRecMap{}, 1: testRecMap{}}},
+	}
+	checkDecodedValue(items, reg, t)
+}
+
 func TestUnserialization_Pointer(t *testing.T) {
 	reg, _ := registry()
 	values := []any{
 		(*any)(nil),
+		(*string)(nil),
 		func() any {
 			b := true
 			return &b
@@ -271,26 +392,158 @@ func TestUnserialization_Pointer(t *testing.T) {
 			n0 = &n1
 			return n0
 		}(),
+		func() any {
+			x := []uint{1, 2, 3}
+			return &x
+		}(),
+		func() any {
+			b := true
+			return testBoolPtr(&b)
+		}(),
+		testRecPtr(nil),
+		func() any {
+			var x testRecPtr
+			return testRecPtr(&x)
+		}(),
 	}
-	// *[]uint
-	/*v5 := []uint{1, 2, 3}
-	values[5] = &v5
-	// testPtr
-	b := true
-	v6 := testPtr(&b)
-	values[6] = v6
-	// testRectPtr
-	values[7] = testRecPtr(nil)
-	// nil ptr
-	var s *string
-	values[8] = s
-	// cyclic refs
-	var n0, n1 any
-	n1 = &n0
-	n0 = &n1
-	values[9] = n0
-    // Complext pointers
-	lst := newLst()
+	checkDecodedValue(values, reg, t)
+}
+
+func TestUnserialization_Reference(t *testing.T) {
+	reg, _ := registry()
+	values := []any{
+		// #1
+		func() any {
+			var x any
+			x = &x
+			return x
+		}(),
+		// #2
+		func() any {
+			var x testRecPtr
+			x = &x
+			return x
+		}(),
+		// #3
+		func() any {
+			var x1, x2 any
+			x1 = &x2
+			x2 = &x1
+			return x1
+		}(),
+		// #4
+		func() any {
+			var x1, x2 testRecPtr
+			x1 = &x2
+			x2 = &x1
+			return x1
+		}(),
+		// #5
+		func() any {
+			var x1, x2, x3 any
+			x1 = &x2
+			x2 = &x3
+			x3 = &x1
+			return x1
+		}(),
+		// #6
+		func() any {
+			var x1, x2, x3 testRecPtr
+			x1 = &x2
+			x2 = &x3
+			x3 = &x1
+			return x1
+		}(),
+		// #7
+		func() any {
+			var x1 any
+			var x2 *any
+			var x3 **any
+			x2 = &x1
+			x3 = &x2
+			x1 = x3
+			return x3
+		}(),
+		// #8
+		func() any {
+			var x1 any
+			var x2 *any
+			var x3 **any
+			x2 = &x1
+			x3 = &x2
+			x1 = &x3
+			return x3
+		}(),
+		// #9
+		func() any {
+			b := true
+			return []*bool{&b, &b, &b}
+		}(),
+		// #10
+		func() any {
+			x := []any{nil, true, nil}
+			x[0] = &x[1]
+			x[2] = &x[1]
+			return x
+		}(),
+		// #11
+		func() any {
+			x := []any{nil}
+			x[0] = &x[0]
+			return x
+		}(),
+		// #12
+		func() any {
+			x := []any{nil, nil}
+			x[0] = &x[1]
+			x[1] = &x[0]
+			return x
+		}(),
+		// #13
+		func() any {
+			x := []any{nil, nil, nil}
+			x[0] = &x[1]
+			x[1] = &x[2]
+			x[2] = &x[0]
+			return x
+		}(),
+		// #14
+		func() any {
+			x := []any{nil}
+			x[0] = x
+			return x
+		}(),
+		// #15
+		func() any {
+			x := []any{nil, nil}
+			x[1] = x
+			return x
+		}(),
+		// #16
+		func() any {
+			x := []any{nil, nil}
+			x[0] = &x[1]
+			x[1] = x
+			return x
+		}(),
+		// #17
+		func() any {
+			x := []any{nil, nil, nil}
+			x[0] = &x[1]
+			x[1] = &x[2]
+			x[2] = x
+			return x
+		}(),
+		// #18
+		func() any {
+			x := []any{nil, []any{nil}}
+			x[0] = &x[1].([]any)[0]
+			x[1].([]any)[0] = x
+			return x
+		}(),
+	}
+	// Complext pointers
+	/*lst := newLst()
 	nd1 := lst.push()
 	nd2 := lst.push()
 	nd1.next = nil
@@ -301,49 +554,6 @@ func TestUnserialization_Pointer(t *testing.T) {
 	checkDecodedValue(values, reg, t)
 }
 
-func TestUnserialization_Reference(t *testing.T) {
-	reg, _ := registry()
-	values := []any{
-		func() any {
-			var x any
-			x = &x
-			return x
-		}(),
-		func() any {
-			var x0, x1 any
-			x0 = &x1
-			x1 = &x0
-			return x0
-		}(),
-		func() any {
-			var x0, x1, x2 any
-			x0 = &x1
-			x1 = &x2
-			x2 = &x0
-			return x0
-		}(),
-		func() any {
-			var x1 any
-			var x2 *any
-			var x3 **any
-			x2 = &x1
-			x3 = &x2
-			x1 = x3
-			return x3
-		}(),
-		func() any {
-			var x1 any
-			var x2 *any
-			var x3 **any
-			x2 = &x1
-			x3 = &x2
-			x1 = &x3
-			return x3
-		}(),
-	}
-	checkDecodedValue(values, reg, t)
-}
-
 func checkDecodedValue(values []any, typeRegistry *TypeRegistry, t *testing.T) {
 	serializer := NewSerializer().WithTypeRegistry(typeRegistry)
 	unserializer := NewUnserializer().WithTypeRegistry(typeRegistry)
@@ -351,11 +561,37 @@ func checkDecodedValue(values []any, typeRegistry *TypeRegistry, t *testing.T) {
 		data := serializer.Encode(expected)
 		actual, err := unserializer.Decode(data)
 		if err != nil {
-			t.Errorf("Test #%d: Decode(%#v) raises error: %q", i+1, expected, err)
-		} else if !reflect.DeepEqual(expected, actual) {
-			t.Errorf("Test #%d: Decode(%#v) returns wrong value %#v", i+1, expected, actual)
+			t.Errorf("Test #%d: Decode(%T) raises error: %q", i+1, expected, err)
+		} else  {
+			var equals bool
+			if expected != nil {
+				switch reflect.TypeOf(expected).Kind() {
+				case reflect.Chan:
+					equals = channelEqual(typeRegistry, expected, actual)
+				case reflect.Func:
+					equals = funcEqual(expected, actual)
+				default:
+					equals = reflect.DeepEqual(expected, actual)
+				}
+			} else {
+				equals = reflect.DeepEqual(expected, actual)
+			}
+			if !equals {
+				t.Errorf("Test #%d: Decode(%T) returns wrong value %T", i+1, expected, actual)
+			}
 		}
 	}
+}
+
+func channelEqual(reg *TypeRegistry, expected any, actual any) bool {
+	if reg.typeName(reflect.TypeOf(expected)) != reg.typeName(reflect.TypeOf(actual)) {
+		return false
+	}
+	return reflect.ValueOf(expected).Cap() == reflect.ValueOf(actual).Cap()
+}
+
+func funcEqual(expected any, actual any) bool {
+	return funcName(reflect.ValueOf(expected)) == funcName(reflect.ValueOf(actual))
 }
 
 /*import (
@@ -371,116 +607,6 @@ func checkDecodedValue(values []any, typeRegistry *TypeRegistry, t *testing.T) {
 
 	"github.com/URALINNOVATSIYA/codec/tstpkg"
 )
-
-func TestComplex64Unserialization(t *testing.T) {
-	var items = []any{
-		complex(float32(0), float32(0)),
-		complex(float32(1), float32(0)),
-		complex(float32(0), float32(1)),
-		complex(float32(1.23), float32(123)),
-		complex(float32(123), float32(1.23)),
-		complex(float32(1.23), float32(-1.23)),
-		complex(float32(-1.23), float32(1.23)),
-		testComplex64(complex(float32(1.23), float32(2))),
-	}
-	checkUnserializer(items, t)
-}
-
-func TestComplex128Unserialization(t *testing.T) {
-	var items = []any{
-		complex(float64(0), float64(0)),
-		complex(float64(1), float64(0)),
-		complex(float64(0), float64(1)),
-		complex(1.23, float64(123)),
-		complex(float64(123), 1.23),
-		complex(1.23, -1.23),
-		complex(-1.23, 1.23),
-		testComplex128(complex(-1.23, 2.34)),
-	}
-	checkUnserializer(items, t)
-}
-
-func TestUintptrUnserialization(t *testing.T) {
-	var items = []any{
-		uintptr(123456),
-		testUintptr(1234567),
-	}
-	checkUnserializer(items, t)
-}
-
-func TestUnsafePointerUnserialization(t *testing.T) {
-	var items = []any{
-		unsafe.Pointer(nil),
-		unsafe.Pointer(uintptr(123456)),
-		testUnsafePointer(nil),
-		testUnsafePointer(uintptr(1234567)),
-	}
-	checkUnserializer(items, t)
-}
-
-func TestSliceUnserialization(t *testing.T) {
-	var items = []any{
-		([]byte)(nil),
-		[]int{},
-		[]int{1, -1, 0, 1234, -1234},
-		[]uint{},
-		[]uint{1, 0, 1234, math.MaxUint},
-		[]string{"a", "ab", "abc"},
-		[]bool{true, false},
-		[]any{1, true, 1.23, "abc"},
-		[][]bool{{false}, {}, {true, false, true}},
-		testSlice{"a", "ab", "abc"},
-		testGenericSlice[int]{1, 2, 3},
-		testRecSlice{testRecSlice{}, testRecSlice{testRecSlice{}}},
-	}
-	checkUnserializer(items, t)
-}
-
-func TestArrayUnserialization(t *testing.T) {
-	var items = []any{
-		[0]int{},
-		[1]int{-1},
-		[3]uint{1, 2, 3},
-		[4]bool{true, false, false, true},
-		[3][]bool{{false}, {}, {true, false, true}},
-		*(*[256]byte)(bytes.Repeat([]byte{1}, 256)),
-		testArray{-1, 2, -3},
-		testGenericArray[float32]{0, -1.23},
-	}
-	checkUnserializer(items, t)
-}
-
-func TestMapUnserialization(t *testing.T) {
-	var items = []any{
-		(map[byte]byte)(nil),
-		map[string]bool{"a": true, "b": false},
-		map[int32]int8{-1: 2, 3: -4, -123456: -128},
-		testMap{"a": 1, "b": 2, "c": 3},
-		testGenericMap[string, int]{"a": 1, "b": -2, "": 0},
-		testRecMap{8: testRecMap{2: testRecMap{}, 1: testRecMap{}}},
-	}
-	checkUnserializer(items, t)
-}
-
-func TestChanUnserialization(t *testing.T) {
-	var items = []any{
-		(chan<- []int8)(nil),
-		make(chan int),
-		make(chan<- bool, 1),
-		make(<-chan *testStruct, 2),
-		make(testChan, 10),
-	}
-	checkUnserializer(items, t)
-}
-
-func TestFuncUnserialization(t *testing.T) {
-	var items = []any{
-		(func(bool, uint))(nil),
-		Serialize,
-		Unserialize,
-	}
-	checkUnserializer(items, t)
-}
 
 func TestStructUnserialization(t *testing.T) {
 	s := &testStruct{
@@ -587,75 +713,6 @@ func TestInterfaceUnserialization(t *testing.T) {
 	checkUnserializer(items, t)
 }
 
-func TestPointerUnserialization(t *testing.T) {
-	values := make([]any, 11)
-	// *Nil
-	values[0] = (*any)(nil)
-	// *Bool
-	v1 := true
-	values[1] = &v1
-	v2 := false
-	values[2] = &v2
-	// *String
-	v3 := ""
-	values[3] = &v3
-	v4 := "abc"
-	values[4] = &v4
-	// *[]uint
-	v5 := []uint{1, 2, 3}
-	values[5] = &v5
-	// testPtr
-	b := true
-	v6 := testPtr(&b)
-	values[6] = v6
-	// testRectPtr
-	values[7] = testRecPtr(nil)
-	// nil ptr
-	var s *string
-	values[8] = s
-	// cyclic refs
-	var n0, n1 any
-	n1 = &n0
-	n0 = &n1
-	values[9] = n0
-    // Complext pointers
-	/*lst := newLst()
-	nd1 := lst.push()
-	nd2 := lst.push()
-	nd1.next = nil
-	nd1.lst = nil
-	nd2.next = nil
-	lst.root.next = nil
-	values[10] = nd1
-	checkUnserializer([]any{[]any{testRecPtr(nil), nil}}, t)
-}
-
-func TestRecursiveReferenceUnserialization(t *testing.T) {
-	var x any
-	x = &x
-
-	y := unserializedValue(x, t)
-
-	if y.(*any) != *y.(*any) || y.(*any) != *(*y.(*any)).(*any) {
-		t.Errorf("Unserializer::decode(%#v): variable does not point to itself", x)
-	}
-}
-
-func TestReferenceOnCommonDataUnserialization(t *testing.T) {
-	a := make([]*byte, 3)
-	d := byte(123)
-	a[0] = &d
-	a[1] = &d
-	a[2] = &d
-
-	b := unserializedValue(a, t).([]*byte)
-
-	*b[1] = 0
-	if *b[0] != *b[2] || *b[0] != 0 {
-		t.Errorf("Unserializer::decode(%#v): elements do not point to the common data", a)
-	}
-}
-
 func TestReferenceOrderUnserialization(t *testing.T) {
 	a := make([]any, 7)
 	a[0] = &a[1]
@@ -714,47 +771,6 @@ func TestMixedReferenceUnserialization(t *testing.T) {
 	if p.F4.([]any)[4] != &p.f6 {
 		t.Errorf("Unserializer::decode(%#v): element #4 of F4 does not point to f6", s)
 	}
-}
-
-func checkUnserializer(values []any, t *testing.T) {
-	registerTestTypes()
-	serializer := NewSerializer(GetStructCodingMode())
-	unserializer := NewUnserializer(GetStructCodingMode())
-	for _, expected := range values {
-		data := serializer.Encode(expected)
-		actual, err := unserializer.Decode(data)
-		if err != nil {
-			t.Errorf("Unserializer::decode(%#v) raises error: %q", expected, err)
-		} else {
-			var equals bool
-			if expected != nil {
-				switch reflect.TypeOf(expected).Kind() {
-				case reflect.Chan:
-					equals = channelEqual(expected, actual)
-				case reflect.Func:
-					equals = funcEqual(expected, actual)
-				default:
-					equals = reflect.DeepEqual(expected, actual)
-				}
-			} else {
-				equals = reflect.DeepEqual(expected, actual)
-			}
-			if !equals {
-				t.Errorf("Unserializer::decode(%#v) returns wrong value %#v", expected, actual)
-			}
-		}
-	}
-}
-
-func channelEqual(expected any, actual any) bool {
-	if tChecker.fullTypeName(reflect.TypeOf(expected)) != tChecker.fullTypeName(reflect.TypeOf(actual)) {
-		return false
-	}
-	return reflect.ValueOf(expected).Cap() == reflect.ValueOf(actual).Cap()
-}
-
-func funcEqual(expected any, actual any) bool {
-	return funcName(reflect.ValueOf(expected)) == funcName(reflect.ValueOf(actual))
 }
 
 func unserializedValue(expected any, t *testing.T) any {

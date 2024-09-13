@@ -10,7 +10,7 @@ import (
 type TypeRegistry struct {
 	typeAutoReg bool
 	types       map[int]reflect.Type  // registered types
-	funcs       map[int]reflect.Value // registered functions
+	funcs       map[reflect.Type]reflect.Value // registered functions
 	ids         map[string]int        // type full names and their ids
 	mx          sync.RWMutex
 }
@@ -19,7 +19,7 @@ func NewTypeRegistry(typeAutoReg bool) *TypeRegistry {
 	return &TypeRegistry{
 		typeAutoReg: typeAutoReg,
 		types:       make(map[int]reflect.Type),
-		funcs:       make(map[int]reflect.Value),
+		funcs:       make(map[reflect.Type]reflect.Value),
 		ids:         make(map[string]int),
 	}
 }
@@ -135,6 +135,16 @@ func (r *TypeRegistry) typeIdByName(name string) (id int, exists bool) {
 	return
 }
 
+func (r *TypeRegistry) funcByType(t reflect.Type) reflect.Value {
+	r.mx.RLock()
+	v, exists := r.funcs[t]
+	r.mx.RUnlock()
+	if !exists {
+		panic(fmt.Errorf("function of type %s is not found", t))
+	}
+	return v
+}
+
 func (r *TypeRegistry) bindTypeWithName(t reflect.Type, name string) int {
 	r.mx.Lock()
 	id := r.assignTypeId(name)
@@ -146,8 +156,9 @@ func (r *TypeRegistry) bindTypeWithName(t reflect.Type, name string) int {
 func (r *TypeRegistry) bindFuncWithName(v reflect.Value, name string) int {
 	r.mx.Lock()
 	id := r.assignTypeId(name)
-	r.types[id] = v.Type()
-	r.funcs[id] = v
+	t := v.Type()
+	r.types[id] = t
+	r.funcs[t] = v
 	r.mx.Unlock()
 	return id
 }

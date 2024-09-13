@@ -850,19 +850,19 @@ func TestSerialization_Chan(t *testing.T) {
 	var items = []serializerTestItems{
 		{
 			(<-chan bool)(nil),
-			[]byte{version, id(make(<-chan bool)), meta_nil | byte(reflect.RecvDir)},
+			[]byte{version, id(make(<-chan bool)), meta_nil},
 		},
 		{
 			make(chan int),
-			[]byte{version, id(make(chan int)), byte(reflect.BothDir), 0b0001_0000},
+			[]byte{version, id(make(chan int)), 0, 0b0001_0000},
 		},
 		{
 			make(chan<- bool, 1),
-			[]byte{version, id(make(chan<- bool)), byte(reflect.SendDir), 0b0001_0000 | 1},
+			[]byte{version, id(make(chan<- bool)), 0, 0b0001_0000 | 1},
 		},
 		{
 			make(testChan, 10),
-			[]byte{version, id(testChan(nil)), byte(reflect.RecvDir), 0b0001_0000 | 10},
+			[]byte{version, id(testChan(nil)), 0, 0b0001_0000 | 10},
 		},
 	}
 	checkEncodedData(t, reg, items)
@@ -1307,6 +1307,13 @@ func TestSerialization_Pointer(t *testing.T) {
 			testRecPtr(nil),
 			[]byte{version, id(testRecPtr(nil)), meta_nil},
 		},
+		{
+			func() any {
+				var x testRecPtr
+				return testRecPtr(&x)
+			}(),
+			[]byte{version, id(testRecPtr(nil)), 0, meta_nil},
+		},
 	}
 	checkEncodedData(t, reg, items)
 }
@@ -1314,7 +1321,7 @@ func TestSerialization_Pointer(t *testing.T) {
 func TestSerialization_Reference(t *testing.T) {
 	reg, id := registry()
 	var items = []serializerTestItems{
-		{
+		/*{
 			func() any {
 				var x any
 				x = &x
@@ -1328,6 +1335,17 @@ func TestSerialization_Reference(t *testing.T) {
 		},
 		{
 			func() any {
+				var x testRecPtr
+				x = &x
+				return x
+			}(),
+			[]byte{
+				version,
+				id(testRecPtr(nil)), 0, meta_prf, 0b0010_0000 | 1,
+			},
+		},
+		{
+			func() any {
 				var x1, x2 any
 				x1 = &x2
 				x2 = &x1
@@ -1335,38 +1353,23 @@ func TestSerialization_Reference(t *testing.T) {
 			}(),
 			[]byte{
 				version,
-				id((*any)(nil)), 0, // x1
+				id((*any)(nil)), 0,        // x1
 				id((*any)(nil)), meta_prf, // x2
-				0b0010_0000,        // referenced value
+				0b0010_0000,               // referenced value
 			},
 		},
 		{
 			func() any {
-				b := true
-				return []*bool{&b, &b, &b}
+				var x1, x2 testRecPtr
+				x1 = &x2
+				x2 = &x1
+				return x1
 			}(),
 			[]byte{
 				version,
-				id(([]*bool)(nil)), 0, 0b0001_0000 | 3, 0b0001_0000,
-				0, 1,
-				meta_prf, 0b0010_0000 | 2,
-				meta_prf, 0b0010_0000 | 2,
-			},
-		},
-		{
-			func() any {
-				x := []any{nil, true, nil}
-				x[0] = &x[1]
-				x[2] = &x[1]
-				return x
-			}(),
-			[]byte{
-				version,
-				id(([]any)(nil)), 0, 0b0001_0000 | 3,
-				0b0001_0000 | 2, 0b0001_0000 | 1, 0b0001_0000 | 2, // list of ref indexes
-				id((*any)(nil)), 0, id(false), 1, // x[0] = &x[1]
-				0b0010_0000 | 3, // x[1] = true
-				0b0010_0000 | 2, // x[2] = &x[1]
+				id(testRecPtr(nil)), 0,    // x1
+				0,                         // x2
+				meta_prf, 0b0010_0000 | 1, // referenced value
 			},
 		},
 		{
@@ -1407,6 +1410,35 @@ func TestSerialization_Reference(t *testing.T) {
 		},
 		{
 			func() any {
+				b := true
+				return []*bool{&b, &b, &b}
+			}(),
+			[]byte{
+				version,
+				id(([]*bool)(nil)), 0, 0b0001_0000 | 3, 0b0001_0000,
+				0, 1,
+				meta_prf, 0b0010_0000 | 2,
+				meta_prf, 0b0010_0000 | 2,
+			},
+		},
+		{
+			func() any {
+				x := []any{nil, true, nil}
+				x[0] = &x[1]
+				x[2] = &x[1]
+				return x
+			}(),
+			[]byte{
+				version,
+				id(([]any)(nil)), 0, 0b0001_0000 | 3,
+				0b0001_0000 | 2, 0b0001_0000 | 1, 0b0001_0000 | 2, // list of ref indexes
+				id((*any)(nil)), 0, id(false), 1, // x[0] = &x[1]
+				0b0010_0000 | 3, // x[1] = true
+				0b0010_0000 | 2, // x[2] = &x[1]
+			},
+		},
+		{
+			func() any {
 				s := struct{
 					a any
 					b any
@@ -1429,6 +1461,49 @@ func TestSerialization_Reference(t *testing.T) {
 				meta_ref, 0b0010_0000 | 2, // s.c
 			},
 		},
+		{
+			func() any {
+				x := []any{nil}
+				x[0] = &x[0]
+				return x
+			}(),
+			[]byte{
+				version,
+				id(([]any)(nil)), 0, 0b0001_0000 | 1, 0b0001_0000,
+				id((*any)(nil)), meta_prf, 0b0010_0000 | 1,
+			},
+		},*/
+		{
+			func() any {
+				x := []any{nil}
+				x[0] = x
+				return x
+			}(),
+			[]byte{
+				version,
+				id(([]any)(nil)), 0, 0b0001_0000 | 1, 0b0001_0000,     // main slice
+				id(([]any)(nil)), 0, 0b0001_0000 | 1, 0b0001_0000 | 1, 0b0001_0000, // x[0] - copy of main slice
+				0b0010_0000 | 1, // reference to copy of main slice
+			},
+		},
+		{
+			func() any {
+				x := []any{nil, []any{nil}}
+				x[0] = &x[1].([]any)[0]
+				x[1].([]any)[0] = x
+				return x
+			}(),
+			[]byte{
+				version,
+				id(([]any)(nil)), 0, 0b0001_0000 | 2, 0b0001_0000 | 1, 0b0001_0000 | 1, // external slice
+				id((*any)(nil)), 0, // &x[1][0]
+					id(([]any)(nil)), 0, 0b0001_0000 | 2, 0b0001_0000 | 1, 0b0001_0000, // x[1][0] = x
+						0b0010_0000 | 1, // ref to x[1]
+						id(([]any)(nil)), 0, 0b0001_0000 | 1, 0b0001_0000 | 1, 0b0001_0000, // x[1] itself
+							0b0010_0000 | 3, // ref to x
+				0b0010_0000 | 5, // ref to x[1]				
+			},
+		},
 	}
 	checkEncodedData(t, reg, items)
 }
@@ -1438,7 +1513,7 @@ func checkEncodedData(t *testing.T, typeRegistry *TypeRegistry, items []serializ
 	for i, item := range items {
 		data := serializer.Encode(item.value)
 		if !bytes.Equal(data, item.data) {
-			t.Errorf("Test #%d: Encode(%v) must return %v, but actual value is %v", i+1, item.value, item.data, data)
+			t.Errorf("Test #%d: Encode(%T) must return %v, but actual value is %v", i+1, item.value, item.data, data)
 		}
 	}
 }

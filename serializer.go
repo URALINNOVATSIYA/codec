@@ -228,13 +228,10 @@ func (s *Serializer) encodeUnsafePointer(v reflect.Value) []byte {
 }
 
 func (s *Serializer) encodeChan(v reflect.Value) []byte {
-	b := []byte{byte(v.Type().ChanDir())}
 	if v.IsNil() {
-		b[0] |= meta_nil
-	} else {
-		b = append(b, s.encodeCount(v.Cap())...)
+		return []byte{meta_nil}
 	}
-	return b
+	return append([]byte{0}, s.encodeCount(v.Cap())...)
 }
 
 func (s *Serializer) encodeFunc(v reflect.Value) []byte {
@@ -285,11 +282,11 @@ func (s *Serializer) encodeMap(v reflect.Value) []byte {
 		value, valueRefVal := s.encodeValue(iter.Value())
 		f := byte(0)
 		if valueRefVal {
-			f |= 1
+			f |= 0b01
 			value = value[1:]
 		}
 		if keyRefVal {
-			f |= 2
+			f |= 0b10
 			key = key[1:]
 		}
 		if f != 0 {
@@ -308,31 +305,48 @@ func (s *Serializer) encodeMap(v reflect.Value) []byte {
 }
 
 func (s *Serializer) encodeStruct(v reflect.Value) []byte {
-	var fields []byte
-	var i, fieldCount int
 	switch s.structCodingMode {
 	case StructCodingModeIndex:
-		for i, fieldCount = 0, v.NumField(); i < fieldCount; i++ {
-			fields = append(fields, s.encodeCount(i)...)
-			field, _ := s.encode(v.Field(i))
-			fields = append(fields, field...)
-		}
+		return s.encodeStructIndexMode(v)
 	case StructCodingModeName:
-		t := v.Type()
-		for i, fieldCount = 0, v.NumField(); i < fieldCount; i++ {
-			fieldName := t.Field(i).Name
-			fields = append(fields, s.encodeString(reflect.ValueOf(fieldName))...)
-			if fieldName == "_" {
-				fields = append(fields, s.encodeCount(i)...)
-			}
-			field, _ := s.encode(v.Field(i))
-			fields = append(fields, field...)
-		}
+		return s.encodeStructNameMode(v)
 	default:
-		for i, fieldCount = 0, v.NumField(); i < fieldCount; i++ {
-			field, _ := s.encode(v.Field(i))
-			fields = append(fields, field...)
+		return s.encodeStructDefaultMode(v)
+	}
+}
+
+func (s *Serializer) encodeStructIndexMode(v reflect.Value) []byte {
+	var fields []byte
+	fieldCount := v.NumField()
+	for i := 0; i < fieldCount; i++ {
+		fields = append(fields, s.encodeCount(i)...)
+		field, _ := s.encode(v.Field(i))
+		fields = append(fields, field...)
+	}
+	return append(s.encodeCount(fieldCount), fields...)
+}
+
+func (s *Serializer) encodeStructNameMode(v reflect.Value) []byte {
+	var fields []byte
+	fieldCount := v.NumField()
+	for i, t := 0, v.Type(); i < fieldCount; i++ {
+		fieldName := t.Field(i).Name
+		fields = append(fields, s.encodeString(reflect.ValueOf(fieldName))...)
+		if fieldName == "_" {
+			fields = append(fields, s.encodeCount(i)...)
 		}
+		field, _ := s.encode(v.Field(i))
+		fields = append(fields, field...)
+	}
+	return append(s.encodeCount(fieldCount), fields...)
+}
+
+func (s *Serializer) encodeStructDefaultMode(v reflect.Value) []byte {
+	var fields []byte
+	fieldCount := v.NumField()
+	for i := 0; i < fieldCount; i++ {
+		field, _ := s.encode(v.Field(i))
+		fields = append(fields, field...)
 	}
 	return append(s.encodeCount(fieldCount), fields...)
 }
@@ -377,16 +391,6 @@ func (s *Serializer) encodeSerializable(v reflect.Value) []byte {
 func (s *Serializer) encodeCount(cnt int) []byte {
 	return asBytesWithSize(uint64(cnt), 4)
 }
-
-/*func (s *Serializer) valueAddress(v reflect.Value) reflect.Value {
-	if !v.CanAddr() {
-		return ""
-	}
-	id := s.typeRegistry.typeIdByValue(v)
-	b := asMinBytes(uint64(id))
-	b = append(b, asMinBytes(uint64(v.UnsafeAddr()))...)
-	return *(*string)(unsafe.Pointer(&b))
-}*/
 
 func Serialize(value any, options ...any) []byte {
 	return NewSerializer().

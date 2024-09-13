@@ -31,6 +31,7 @@ type (
 	testArray         [3]int
 	testSlice         []string
 	testRecSlice      []testRecSlice
+	testMap           map[string]uint64
 	testRecMap        map[byte]testRecMap
 	testBoolPtr       *bool
 	testRecPtr        *testRecPtr
