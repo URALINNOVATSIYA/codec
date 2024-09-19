@@ -93,3 +93,19 @@ func funcName(f reflect.Value) string {
 	}
 	return runtime.FuncForPC(f.Pointer()).Name()
 }
+
+func zeroValueOf(t reflect.Type) reflect.Value {
+	if t == nil {
+		return reflect.Value{}
+	}
+	return reflect.New(t).Elem()
+}
+
+func ptrTo(t reflect.Type, v reflect.Value) reflect.Value {
+	//if v.CanAddr() {
+	//return reflect.NewAt(t, v.Addr().UnsafePointer())
+	//}
+	p := reflect.New(t)
+	p.Elem().Set(v)
+	return p
+}

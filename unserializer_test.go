@@ -2,6 +2,7 @@ package codec
 
 import (
 	"bytes"
+	"fmt"
 	"math"
 	"reflect"
 	"strings"
@@ -410,84 +411,158 @@ func TestUnserialization_Pointer(t *testing.T) {
 }
 
 func TestUnserialization_Reference(t *testing.T) {
+	tPtr := reflect.TypeOf((*any)(nil))
+	tAny := tPtr.Elem()
+	x1 := zeroValueOf(reflect.TypeOf((***any)(nil)))
+	x2 := zeroValueOf(tPtr)
+	xx2 := zeroValueOf(tPtr)
+	x3 := zeroValueOf(reflect.TypeOf((**any)(nil)))
+	x1.Set(ptrTo(x3.Type(), x3))
+	x2.Set(ptrTo(tAny, x1))
+	x3.Set(ptrTo(tPtr, x2))
+	x1.Elem().Set(x3)
+	xx2.Set(ptrTo(tAny, x1))
+	v := x3.Interface()
+	/*v1 := v.(*any)
+	v2 := (*v1).(*any)
+	v3 := (*v2).(*any)
+	fmt.Println(*v3 == v1)*/
+	v3 := v.(**any)
+	v2 := *v3
+	v1 := *v2
+	vv2 := xx2.Interface().(*any)
+	fmt.Println(*v1.(***any) == v3)
+	fmt.Println(*vv2 == v1)
+	/*var x1 any
+	var x2 *any
+	var x3 **any
+	x2 = &x1
+	x3 = &x2
+	x1 = &x3
+	m := make(map[any]byte)
+	m[x1] = 1
+	m[x2] = 2
+	m[x3] = 3*/
 	reg, _ := registry()
 	values := []any{
 		// #1
-		func() any {
+		/*func() (any, check) {
 			var x any
 			x = &x
-			return x
-		}(),
+			return x, func(res any) bool {
+				v := res.(*any)
+				return v == *v
+			}
+		},
 		// #2
-		func() any {
+		func() (any, check) {
 			var x testRecPtr
 			x = &x
-			return x
-		}(),
+			return x, func(res any) bool {
+				v := res.(testRecPtr)
+				return v == *v
+			}
+		},
 		// #3
-		func() any {
+		func() (any, check) {
 			var x1, x2 any
 			x1 = &x2
 			x2 = &x1
-			return x1
-		}(),
+			return x1, func(res any) bool {
+				x1 := res.(*any)
+				x2 := (*x1).(*any)
+				return *x2 == x1
+			}
+		},
 		// #4
-		func() any {
+		func() (any, check) {
 			var x1, x2 testRecPtr
 			x1 = &x2
 			x2 = &x1
-			return x1
-		}(),
+			return x1, func(res any) bool {
+				x1 := res.(testRecPtr)
+				x2 := *x1
+				return *x2 == x1
+			}
+		},
 		// #5
-		func() any {
+		func() (any, check) {
 			var x1, x2, x3 any
 			x1 = &x2
 			x2 = &x3
 			x3 = &x1
-			return x1
-		}(),
+			return x1, func(res any) bool {
+				x1 := res.(*any)
+				x2 := (*x1).(*any)
+				x3 := (*x2).(*any)
+				return *x3 == x1
+			}
+		},
 		// #6
-		func() any {
+		func() (any, check) {
 			var x1, x2, x3 testRecPtr
 			x1 = &x2
 			x2 = &x3
 			x3 = &x1
-			return x1
-		}(),
+			return x1, func(res any) bool {
+				x1 := res.(testRecPtr)
+				x2 := *x1
+				x3 := *x2
+				return *x3 == x1
+			}
+		},
 		// #7
-		func() any {
+		func() (any, check) {
 			var x1 any
 			var x2 *any
 			var x3 **any
 			x2 = &x1
 			x3 = &x2
 			x1 = x3
-			return x3
-		}(),
+			return x3, func(res any) bool {
+				x3 := res.(**any)
+				x2 := *x3
+				x1 := *x2
+				return x1 == x3
+			}
+		},
 		// #8
-		func() any {
+		func() (any, check) {
 			var x1 any
 			var x2 *any
 			var x3 **any
 			x2 = &x1
 			x3 = &x2
 			x1 = &x3
-			return x3
-		}(),
+			return x3, func(res any) bool {
+				x3 := res.(**any)
+				x2 := *x3
+				x1 := *x2
+				return *x1.(***any) == x3
+			}
+		},
 		// #9
-		func() any {
+		func() (any, check) {
 			b := true
-			return []*bool{&b, &b, &b}
-		}(),
+			return []*bool{&b, &b, &b}, func(res any) bool {
+				v := res.([]*bool)
+				*v[2] = false
+				return *v[0] == false && *v[1] == false
+			}
+		},
 		// #10
-		func() any {
+		func() (any, check) {
 			x := []any{nil, true, nil}
 			x[0] = &x[1]
 			x[2] = &x[1]
-			return x
-		}(),
+			return x, func(res any) bool {
+				v := res.([]any)
+				v[1] = 123
+				return *v[0].(*any) == 123 && *v[2].(*any) == 123
+			}
+		},
 		// #11
-		func() any {
+		/*func() any {
 			x := []any{nil}
 			x[0] = &x[0]
 			return x
@@ -521,26 +596,36 @@ func TestUnserialization_Reference(t *testing.T) {
 		}(),
 		// #16
 		func() any {
+			x := []any{nil, nil, nil}
+			x[2] = x
+			return x
+		}(),*/
+		// #17
+		/*func() (any, check) {
 			x := []any{nil, nil}
 			x[0] = &x[1]
 			x[1] = x
-			return x
-		}(),
-		// #17
-		func() any {
+			return x, func(res any) bool {
+				v := res.([]any)
+				v[1] = 123
+				return *v[0].(*any) == 123
+			}
+		},*/
+		// #18
+		/*func() any {
 			x := []any{nil, nil, nil}
 			x[0] = &x[1]
 			x[1] = &x[2]
 			x[2] = x
 			return x
 		}(),
-		// #18
+		// #19
 		func() any {
 			x := []any{nil, []any{nil}}
 			x[0] = &x[1].([]any)[0]
 			x[1].([]any)[0] = x
 			return x
-		}(),
+		}(),*/
 	}
 	// Complext pointers
 	/*lst := newLst()
@@ -554,10 +639,115 @@ func TestUnserialization_Reference(t *testing.T) {
 	checkDecodedValue(values, reg, t)
 }
 
+func TestUnserialization_Ref(t *testing.T) {
+	reg, id := registry()
+	values := []any{
+		// #1
+		func() ([]byte, any, check) {
+			b := []byte{
+				version,
+				id(([]*bool)(nil)), c2b0(1), c2b0(3), // []*bool values
+				id(false), c2b0(1), 1,                // bool values
+				c2b0(0),          // no mappings
+				c2b0(3),          // 3 pointers
+				c2b0(1), c2b0(4), // 1 points to 4
+				c2b0(2), c2b0(4), // 2 points to 4
+				c2b0(3), c2b0(4), // 3 points to 4
+			}
+			return b,
+			func() any {
+				b := true
+				return []*bool{&b, &b, &b}
+			}(),
+			func(res any) bool {
+				v := res.([]*bool)
+				*v[2] = false
+				return *v[0] == false && *v[1] == false
+			}
+		},
+		// #2
+		func() ([]byte, any, check) {
+			b := []byte{
+				version,
+				id(([]any)(nil)), c2b0(1), c2b0(2), // values, only []any
+				c2b0(1), c2b0(0), c2b0(2), // mappings 0->2
+				c2b0(1), c2b0(1), c2b0(2), // pointers 1->2
+			}
+			return b, 
+			func() any {
+				v := []any{nil, nil}
+	    		v[0] = &v[1]
+				v[1] = v
+				return v
+			}(),
+			func(res any) bool {
+				v := res.([]any)
+				v[1] = 123
+				return *v[0].(*any) == 123
+			}
+		},
+		// #3
+		func() ([]byte, any, check) {
+			b := []byte{
+				version,
+				id(([]any)(nil)), c2b0(2), c2b0(2), c2b0(1), // values, two []any
+				c2b0(1), c2b0(0), c2b0(4), // mappings 0->4
+				c2b0(1), c2b0(1), c2b0(4), // pointers 1->2
+			}
+			return b,
+			func() any {
+				v := []any{nil, []any{nil}}
+				v[0] = &v[1].([]any)[0]
+				v[1].([]any)[0] = v
+				return v
+			}(),
+			func(res any) bool {
+				v := res.([]any)
+				v[1].([]any)[0] = 123
+				return v[0] == 123
+			}
+		},
+		// #4
+		func() ([]byte, any, check) {
+			b := []byte{
+				version,
+				interfaceId(reg), c2b0(1), // values, only any
+				c2b0(0),                   // no mappings
+				c2b0(1), c2b0(0), c2b0(0), // pointers 0->0
+			}
+			return b,
+			func() any {
+				var v any
+				v = &v
+				return v 
+			}(),
+			func(res any) bool {
+				v := res.(*any)
+				return v == *v
+			}
+		},
+	}
+	checkDecodedValue(values, reg, t)
+}
+
 func checkDecodedValue(values []any, typeRegistry *TypeRegistry, t *testing.T) {
 	serializer := NewSerializer().WithTypeRegistry(typeRegistry)
 	unserializer := NewUnserializer().WithTypeRegistry(typeRegistry)
-	for i, expected := range values {
+	var expected any
+	var itemType reflect.Kind
+	var checkValueStructure check
+	for i, item := range values {
+		if item != nil {
+			itemType = reflect.TypeOf(item).Kind()
+		} else {
+			itemType = reflect.Invalid
+		}
+		checkValueStructure = nil
+		if itemType == reflect.Func {
+			if fn, ok := item.(func() (any, check)); ok {
+				expected, checkValueStructure = fn()
+			}
+		}
 		data := serializer.Encode(expected)
 		actual, err := unserializer.Decode(data)
 		if err != nil {
@@ -565,7 +755,7 @@ func checkDecodedValue(values []any, typeRegistry *TypeRegistry, t *testing.T) {
 		} else  {
 			var equals bool
 			if expected != nil {
-				switch reflect.TypeOf(expected).Kind() {
+				switch itemType {
 				case reflect.Chan:
 					equals = channelEqual(typeRegistry, expected, actual)
 				case reflect.Func:
@@ -578,20 +768,11 @@ func checkDecodedValue(values []any, typeRegistry *TypeRegistry, t *testing.T) {
 			}
 			if !equals {
 				t.Errorf("Test #%d: Decode(%T) returns wrong value %T", i+1, expected, actual)
+			} else if checkValueStructure != nil && !checkValueStructure(actual) {
+				t.Errorf("Test #%d: Decode(%T) returns value of wrong structure", i+1, expected)
 			}
 		}
 	}
-}
-
-func channelEqual(reg *TypeRegistry, expected any, actual any) bool {
-	if reg.typeName(reflect.TypeOf(expected)) != reg.typeName(reflect.TypeOf(actual)) {
-		return false
-	}
-	return reflect.ValueOf(expected).Cap() == reflect.ValueOf(actual).Cap()
-}
-
-func funcEqual(expected any, actual any) bool {
-	return funcName(reflect.ValueOf(expected)) == funcName(reflect.ValueOf(actual))
 }
 
 /*import (

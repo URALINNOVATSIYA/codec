@@ -53,14 +53,15 @@ func (u *Unserializer) WithStructCodingMode(mode byte) *Unserializer {
 }
 
 func (u *Unserializer) Decode(data []byte) (value any, err error) {
+	fmt.Println("Unserialiation")
 	if data == nil {
 		return nil, io.ErrUnexpectedEOF
 	}
-	defer func() {
-		if e := recover(); e != nil {
-			err = fmt.Errorf("%s", e)
-		}
-	}()
+	//defer func() {
+	//	if e := recover(); e != nil {
+	//		err = fmt.Errorf("%s", e)
+	//	}
+	//}()
 	u.pos = 1 // skip version for now
 	u.data = data
 	u.size = len(data)
@@ -75,7 +76,8 @@ func (u *Unserializer) Decode(data []byte) (value any, err error) {
 
 func (u *Unserializer) decode() reflect.Value {
 	if u.top() == meta_ref {
-		return u.decodeReference()
+		ref, _ := u.decodeReference()
+		return ref
 	}
 	return u.decodeValue(u.decodeType())
 }
@@ -98,9 +100,11 @@ func (u *Unserializer) zeroValueOf(t reflect.Type) reflect.Value {
 
 func (u *Unserializer) populateValue(t reflect.Type, v reflect.Value) reflect.Value {
 	u.saveRef(v)
+	fmt.Printf("cnt=%d: %s\n", u.cnt, u.typeRegistry.typeName(t))
 	cnt := u.cnt
-	u.rels[cnt] = []uint32{}
 	switch v.Kind() {
+	case reflect.Invalid:
+		u.decodeNil()	
 	case reflect.Bool:
 		u.decodeBool(v)
 	case reflect.String:
@@ -152,11 +156,19 @@ func (u *Unserializer) populateValue(t reflect.Type, v reflect.Value) reflect.Va
 	case reflect.Pointer:
 		u.decodePointer(t.Elem(), v)	
 	}
-	for _, c := range u.rels[cnt] {
-		reflect.Indirect(u.refs[c]).Set(v)
-	}
-	u.rels[cnt] = nil
+	u.updateRefValues(cnt, v)
 	return v
+}
+
+func (u *Unserializer) updateRefValues(ref uint32,  v reflect.Value) {
+	for _, c := range u.rels[ref] {
+		reflect.Indirect(u.refs[c]).Set(v)
+		//u.updateRefValues(c, u.refs[c])
+	}
+}
+
+func (u *Unserializer) decodeNil() {
+	u.readByte()
 }
 
 func (u *Unserializer) decodeBool(v reflect.Value) {
@@ -172,7 +184,7 @@ func (u *Unserializer) decodeUint8(v reflect.Value) {
 }
 
 func (u *Unserializer) decodeInt8(v reflect.Value) {
-	v.SetInt(toInt(uint64(u.readByte())))
+	v.SetInt(u2i(uint64(u.readByte())))
 }
 
 func (u *Unserializer) decodeUint16(v reflect.Value) {
@@ -180,7 +192,7 @@ func (u *Unserializer) decodeUint16(v reflect.Value) {
 }
 
 func (u *Unserializer) decodeInt16(v reflect.Value) {
-	v.SetInt(toInt(u.decodeCount(2)))
+	v.SetInt(u2i(u.decodeCount(2)))
 }
 
 func (u *Unserializer) decodeUint32(v reflect.Value) {
@@ -188,7 +200,7 @@ func (u *Unserializer) decodeUint32(v reflect.Value) {
 }
 
 func (u *Unserializer) decodeInt32(v reflect.Value) {
-	v.SetInt(toInt(u.decodeCount(3)))
+	v.SetInt(u2i(u.decodeCount(3)))
 }
 
 func (u *Unserializer) decodeUint64(v reflect.Value) {
@@ -196,7 +208,7 @@ func (u *Unserializer) decodeUint64(v reflect.Value) {
 }
 
 func (u *Unserializer) decodeInt64(v reflect.Value) {
-	v.SetInt(toInt(u.decodeCount(4)))
+	v.SetInt(u2i(u.decodeCount(4)))
 }
 
 func (u *Unserializer) decodeUint(v reflect.Value) {
@@ -284,16 +296,27 @@ func (u *Unserializer) decodeList(elemType reflect.Type, v reflect.Value) {
 	for i, j := 0, 0; i < length; i++ {
 		elemValue := v.Index(i)
 		if j < refcnt && refs[j] == i {
-			ref := u.decodeReference()
+			u.saveRef(elemValue)
+			fmt.Printf("cnt=%d: %s\n", u.cnt, u.typeRegistry.typeName(elemType))
+			ref, cnt := u.decodeReference()
 			elemValue.Set(ref)
-			//u.cnt++
-			u.refs[u.cnt] = elemValue
-			//fmt.Printf("%s\n", ref.Elem().Type())
+
+			var value reflect.Value = elemValue
+			for k := uint32(cnt-1); k != 0; k-- {
+				ref := u.refs[k]
+				switch ref.Kind() {
+				case reflect.Pointer:
+					ref.Set(u.ptrTo(ref.Type().Elem(), elemValue))
+				default:
+					ref.Set(value)
+				} 
+				value = ref
+			}
+
 			j++
 		} else {
 			u.populateValue(elemType, elemValue)
 		}
-		//v.Index(i).Set(elemValue)
 	}
 }
 
@@ -315,12 +338,12 @@ func (u *Unserializer) decodeMap(keyType reflect.Type, valueType reflect.Type, v
 	for i, j := 0, 0; i < length; i++ {
 		if j < refcnt && refs[j] == i {
 			if reftps[j] & 0b01 != 0 {
-				key = u.decodeReference()
+				key, _ = u.decodeReference()
 			} else {
 				key = u.decodeValue(keyType)
 			}
 			if reftps[j] & 0b10 != 0 {
-				value = u.decodeReference()
+				value, _ = u.decodeReference()
 			} else {
 				value = u.decodeValue(valueType)
 			}
@@ -352,7 +375,10 @@ func (u *Unserializer) decodeStructDefaultMode(v reflect.Value) {
 }
 
 func (u *Unserializer) decodeInterface(v reflect.Value) {
-	v.Set(u.decode())
+	elem := u.decode()
+	if elem.IsValid() {
+		v.Set(elem)
+	}
 }
 
 func (u *Unserializer) decodePointer(elemType reflect.Type, v reflect.Value) {
@@ -362,28 +388,38 @@ func (u *Unserializer) decodePointer(elemType reflect.Type, v reflect.Value) {
 	}
 	var elemValue reflect.Value
 	if meta & meta_prf != 0 {
-		elemValue = u.decodeReference()
+		//elemValue = u.zeroValueOf(elemType)
+		fmt.Printf("cnt=%d: %s\n", u.cnt, u.typeRegistry.typeName(elemType))
+		elemValue, _ = u.decodeReference()
+		//elemValue.Set(ref)
+		u.saveRef(elemValue)
+		//fmt.Printf("%T, %v\n", elemValue.Interface(), elemValue.Interface())
 	} else {
 		elemValue = u.decodeValue(elemType)
 	}
 	v.Set(u.ptrTo(elemType, elemValue))
+	//fmt.Printf("%T, %v\n", v.Interface(), v.Interface())
 }
 
-func (u *Unserializer) decodeReference() reflect.Value {
+func (u *Unserializer) decodeReference() (reflect.Value, uint32) {
 	if u.top() == meta_ref {
 		_ = u.readByte() // skip ref type if any
 	}
 	cnt := uint32(u.decodeCount(3))
 	if v, exists := u.refs[cnt]; exists {
-		if u.rels[cnt] != nil {
+		fmt.Printf("ref to %d\n", cnt)
+		//if u.rels[cnt] != nil {
 			u.rels[cnt] = append(u.rels[cnt], u.cnt)
-		}
-		return v
+		//}
+		return v, cnt
 	}
 	panic(fmt.Errorf("reference #%d is incorrect", u.cnt))
 }
 
 func (u *Unserializer) ptrTo(t reflect.Type, v reflect.Value) reflect.Value {
+	/*if v.CanAddr() {
+		return reflect.NewAt(t, v.Addr().UnsafePointer())
+	}*/
 	p := reflect.New(t)
 	p.Elem().Set(v)
 	return p
@@ -403,7 +439,7 @@ func (u *Unserializer) decodeCount(sizeBits int) uint64 {
 	bytes := u.readBytes(int(length))
 	first := bytes[0]
 	bytes[0] = (bytes[0] << sizeBits) & 0b1111_1111 >> sizeBits
-	cnt := bytesToUint(bytes)
+	cnt := b2u(bytes)
 	bytes[0] = first
 	return cnt
 }

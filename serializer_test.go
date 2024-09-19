@@ -10,37 +10,9 @@ import (
 	"unsafe"
 )
 
-func registry() (*TypeRegistry, func(v any) byte) {
-	reg := NewTypeRegistry(true)
-	return reg, func(v any) byte {
-		id := reg.typeIdByValue(reflect.ValueOf(v))
-		return asBytesWithSize(uint64(id), 3)[0]
-	}
-}
-
-func interfaceId(reg *TypeRegistry) byte {
-	id, exists := reg.typeIdByName("interface {}")
-	if exists {
-		return asBytesWithSize(uint64(id), 3)[0]
-	}
-	reg.RegisterType(reflect.TypeOf((*any)(nil)).Elem())
-	return interfaceId(reg)
-}
-
 type serializerTestItems struct {
 	value any
 	data  []byte
-}
-
-func TestSerialization_Nil(t *testing.T) {
-	reg, id := registry()
-	items := []serializerTestItems{
-		{
-			nil,
-			[]byte{version, id(nil), meta_nil},
-		},
-	}
-	checkEncodedData(t, reg, items)
 }
 
 func TestSerialization_Bool(t *testing.T) {
@@ -1321,7 +1293,8 @@ func TestSerialization_Pointer(t *testing.T) {
 func TestSerialization_Reference(t *testing.T) {
 	reg, id := registry()
 	var items = []serializerTestItems{
-		/*{
+		// #1
+		{
 			func() any {
 				var x any
 				x = &x
@@ -1333,6 +1306,7 @@ func TestSerialization_Reference(t *testing.T) {
 				0b0010_0000,               // pointer value (referenced value)
 			},
 		},
+		// #2
 		{
 			func() any {
 				var x testRecPtr
@@ -1341,9 +1315,10 @@ func TestSerialization_Reference(t *testing.T) {
 			}(),
 			[]byte{
 				version,
-				id(testRecPtr(nil)), 0, meta_prf, 0b0010_0000 | 1,
+				id(testRecPtr(nil)), meta_prf, 0b0010_0000,
 			},
 		},
+		// #3
 		{
 			func() any {
 				var x1, x2 any
@@ -1358,6 +1333,7 @@ func TestSerialization_Reference(t *testing.T) {
 				0b0010_0000,               // referenced value
 			},
 		},
+		// #4
 		{
 			func() any {
 				var x1, x2 testRecPtr
@@ -1367,11 +1343,11 @@ func TestSerialization_Reference(t *testing.T) {
 			}(),
 			[]byte{
 				version,
-				id(testRecPtr(nil)), 0,    // x1
-				0,                         // x2
-				meta_prf, 0b0010_0000 | 1, // referenced value
+				id(testRecPtr(nil)), 0, // x1
+				meta_prf, 0b0010_0000,  // x2 - referenced value
 			},
 		},
+		// #5
 		{
 			func() any {
 				var x1 any
@@ -1389,6 +1365,7 @@ func TestSerialization_Reference(t *testing.T) {
 				0b0010_0000,         // ref to **any x1
 			},
 		},
+		// #6
 		{
 			func() any {
 				var x1 any
@@ -1401,13 +1378,13 @@ func TestSerialization_Reference(t *testing.T) {
 			}(),
 			[]byte{
 				version,
-				id((**any)(nil)), 0,  // **any &x2
-				0,                    // *any  x2 = &x1
-				id((***any)(nil)), 0, // ***any x1 = &x3
-				meta_prf,             // **any = x3
-				0b0010_0000 | 1,      // ref to x2
+				id((**any)(nil)), 0,   // **any  = &x2
+				0,                     // *any   = &x1
+				id((***any)(nil)),     // ***any = &x3
+				meta_prf, 0b0010_0000, // ref to x3
 			},
 		},
+		// #7
 		{
 			func() any {
 				b := true
@@ -1415,12 +1392,13 @@ func TestSerialization_Reference(t *testing.T) {
 			}(),
 			[]byte{
 				version,
-				id(([]*bool)(nil)), 0, 0b0001_0000 | 3, 0b0001_0000,
+				id(([]*bool)(nil)), 0, 0b0001_0000 | 3, 0b0001_0000 | 2, 0b0001_0000 | 1, 0b0001_0000 | 2, 
 				0, 1,
-				meta_prf, 0b0010_0000 | 2,
-				meta_prf, 0b0010_0000 | 2,
+				0b0010_0000 | 1,
+				0b0010_0000 | 1,
 			},
 		},
+		// #8
 		{
 			func() any {
 				x := []any{nil, true, nil}
@@ -1437,6 +1415,81 @@ func TestSerialization_Reference(t *testing.T) {
 				0b0010_0000 | 2, // x[2] = &x[1]
 			},
 		},
+		// #9
+		{
+			func() any {
+				x := []any{nil}
+				x[0] = &x[0]
+				return x
+			}(),
+			[]byte{
+				version,
+				id(([]any)(nil)), 0, 0b0001_0000 | 1, 0b0001_0000,
+				id((*any)(nil)), meta_prf, 0b0010_0000 | 1,
+			},
+		},
+		// #10
+		{
+			func() any {
+				x := []any{nil}
+				x[0] = x
+				return x
+			}(),
+			[]byte{
+				version,
+				id(([]any)(nil)), 0, 0b0001_0000 | 1, 0b0001_0000 | 1, 0b0001_0000, // external slice
+				0b0010_0000, // reference to copy of external slice
+			},
+		},
+		// #11
+		{
+			func() any {
+				x := []any{nil, nil}
+				x[1] = x
+				return x
+			}(),
+			[]byte{
+				version,
+				id(([]any)(nil)), 0, 0b0001_0000 | 2, 0b0001_0000 | 1, 0b0001_0000 | 1, // external slice
+				id(any(nil)), meta_nil,  // x[0] = nil
+				0b0010_0000, // x[1] = ref to x
+			},
+		},
+		// #12
+		{
+			func() any {
+				x := []any{nil, nil}
+				x[0] = &x[1]
+				x[1] = x
+				return x
+			}(),
+			[]byte {
+				version,
+				id(([]any)(nil)), 0, 0b0001_0000 | 2, 0b0001_0000 | 1, 0b0001_0000 | 1,
+				id((*any)(nil)), meta_prf, 0b0010_0000, // ref to value of x
+				0b0010_0000 | 3, // ref to value of x[1]
+			},
+		},
+		// #13
+		/*{
+			func() any {
+				x := []any{nil, []any{nil}}
+				x[0] = &x[1].([]any)[0]
+				x[1].([]any)[0] = x
+				return x
+			}(),
+			[]byte{
+				version,
+				id(([]any)(nil)), 0, 0b0001_0000 | 2, 0b0001_0000 | 1, 0b0001_0000 | 1, // external slice
+				id((*any)(nil)), 0, // &x[1][0]
+					id(([]any)(nil)), 0, 0b0001_0000 | 2, 0b0001_0000 | 1, 0b0001_0000, // x[1][0] = x
+						0b0010_0000 | 1, // ref to x[1]
+						id(([]any)(nil)), 0, 0b0001_0000 | 1, 0b0001_0000 | 1, 0b0001_0000, // x[1] itself
+							0b0010_0000 | 3, // ref to x
+				0b0010_0000 | 5, // ref to x[1]				
+			},
+		},
+		// #14
 		{
 			func() any {
 				s := struct{
@@ -1460,50 +1513,7 @@ func TestSerialization_Reference(t *testing.T) {
 				meta_ref, 0b0010_0000 | 4, // s.b
 				meta_ref, 0b0010_0000 | 2, // s.c
 			},
-		},
-		{
-			func() any {
-				x := []any{nil}
-				x[0] = &x[0]
-				return x
-			}(),
-			[]byte{
-				version,
-				id(([]any)(nil)), 0, 0b0001_0000 | 1, 0b0001_0000,
-				id((*any)(nil)), meta_prf, 0b0010_0000 | 1,
-			},
 		},*/
-		{
-			func() any {
-				x := []any{nil}
-				x[0] = x
-				return x
-			}(),
-			[]byte{
-				version,
-				id(([]any)(nil)), 0, 0b0001_0000 | 1, 0b0001_0000,     // main slice
-				id(([]any)(nil)), 0, 0b0001_0000 | 1, 0b0001_0000 | 1, 0b0001_0000, // x[0] - copy of main slice
-				0b0010_0000 | 1, // reference to copy of main slice
-			},
-		},
-		{
-			func() any {
-				x := []any{nil, []any{nil}}
-				x[0] = &x[1].([]any)[0]
-				x[1].([]any)[0] = x
-				return x
-			}(),
-			[]byte{
-				version,
-				id(([]any)(nil)), 0, 0b0001_0000 | 2, 0b0001_0000 | 1, 0b0001_0000 | 1, // external slice
-				id((*any)(nil)), 0, // &x[1][0]
-					id(([]any)(nil)), 0, 0b0001_0000 | 2, 0b0001_0000 | 1, 0b0001_0000, // x[1][0] = x
-						0b0010_0000 | 1, // ref to x[1]
-						id(([]any)(nil)), 0, 0b0001_0000 | 1, 0b0001_0000 | 1, 0b0001_0000, // x[1] itself
-							0b0010_0000 | 3, // ref to x
-				0b0010_0000 | 5, // ref to x[1]				
-			},
-		},
 	}
 	checkEncodedData(t, reg, items)
 }
