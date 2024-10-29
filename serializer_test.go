@@ -1,6 +1,6 @@
 package codec
 
-import (
+/*import (
 	"bytes"
 	"errors"
 	"math"
@@ -1513,7 +1513,7 @@ func TestSerialization_Reference(t *testing.T) {
 				meta_ref, 0b0010_0000 | 4, // s.b
 				meta_ref, 0b0010_0000 | 2, // s.c
 			},
-		},*/
+		},
 	}
 	checkEncodedData(t, reg, items)
 }

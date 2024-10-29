@@ -4,7 +4,7 @@ import (
 	"math/bits"
 )
 
-func c2b0(v int) byte {
+func id(v int) byte {
 	return c2b(v)[0]
 }
 

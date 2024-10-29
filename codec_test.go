@@ -4,6 +4,8 @@ import (
 	"bytes"
 	"reflect"
 	"testing"
+
+	"github.com/URALINNOVATSIYA/reflex"
 )
 
 type check func(any) bool
@@ -32,7 +34,7 @@ func runTests(items []testItem, typeRegistry *TypeRegistry, t *testing.T) {
 			if expected != nil {
 				switch reflect.TypeOf(expected).Kind() {
 				case reflect.Chan:
-					equals = channelEqual(typeRegistry, expected, actual)
+					equals = channelEqual(expected, actual)
 				case reflect.Func:
 					equals = funcEqual(expected, actual)
 				default:
@@ -66,23 +68,23 @@ func interfaceId(reg *TypeRegistry) byte {
 	return interfaceId(reg)
 }
 
-func channelEqual(reg *TypeRegistry, expected any, actual any) bool {
-	if reg.typeName(reflect.TypeOf(expected)) != reg.typeName(reflect.TypeOf(actual)) {
+func channelEqual(expected any, actual any) bool {
+	if reflex.NameOf(reflect.TypeOf(expected)) != reflex.NameOf(reflect.TypeOf(actual)) {
 		return false
 	}
 	return reflect.ValueOf(expected).Cap() == reflect.ValueOf(actual).Cap()
 }
 
 func funcEqual(expected any, actual any) bool {
-	return funcName(reflect.ValueOf(expected)) == funcName(reflect.ValueOf(actual))
+	return reflex.FuncNameOf(reflect.ValueOf(expected)) == reflex.FuncNameOf(reflect.ValueOf(actual))
 }
 
 func Test_Nil(t *testing.T) {
-	reg, id := registry()
+	reg, typeId := registry()
 	items := []testItem{
 		{
 			nil,
-			[]byte{version, id(nil)},
+			[]byte{version, id(0), typeId(nil), meta_nil},
 			nil,
 		},
 	}

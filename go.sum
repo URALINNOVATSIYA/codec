@@ -1,3 +1,7 @@
+github.com/URALINNOVATSIYA/reflex v0.0.1 h1:mD3SDtWyMIRaoxqkYNCw33812E8qSIV3oitk0dluZvk=
+github.com/URALINNOVATSIYA/reflex v0.0.1/go.mod h1:Ki9bbucXX1A4gMU3U7Va4yJdVwB7zznGCC0aliTsx1c=
+github.com/URALINNOVATSIYA/reflex v0.0.2 h1:DiWj6SyROWJxO4idOsUwvcuz6eC/BVggN2bk8mmCdy0=
+github.com/URALINNOVATSIYA/reflex v0.0.2/go.mod h1:Ki9bbucXX1A4gMU3U7Va4yJdVwB7zznGCC0aliTsx1c=
 github.com/google/uuid v1.3.0 h1:t6JiXgmwXMjEs8VusXIJk2BXHsn+wx8BZdTaoZ5fu7I=
 github.com/google/uuid v1.3.0/go.mod h1:TIyPZe4MgqvfeYDBFedMoGGpEw/LqOeaOT+nhxU+yHo=
 gitlab.twin24.ai/twin/common-go/gil v0.0.0-20220702115307-7e8cc94e32ff h1:w/KcaMRVCIyd49w0DWBf08FBDBzDI+MMkrb3nukNrG0=

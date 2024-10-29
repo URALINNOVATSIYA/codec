@@ -7,6 +7,8 @@ import (
 	"math/bits"
 	"reflect"
 	"unsafe"
+
+	"github.com/URALINNOVATSIYA/reflex"
 )
 
 type Unserializer struct {
@@ -100,7 +102,7 @@ func (u *Unserializer) zeroValueOf(t reflect.Type) reflect.Value {
 
 func (u *Unserializer) populateValue(t reflect.Type, v reflect.Value) reflect.Value {
 	u.saveRef(v)
-	fmt.Printf("cnt=%d: %s\n", u.cnt, u.typeRegistry.typeName(t))
+	fmt.Printf("cnt=%d: %s\n", u.cnt, reflex.NameOf(t))
 	cnt := u.cnt
 	switch v.Kind() {
 	case reflect.Invalid:
@@ -297,7 +299,7 @@ func (u *Unserializer) decodeList(elemType reflect.Type, v reflect.Value) {
 		elemValue := v.Index(i)
 		if j < refcnt && refs[j] == i {
 			u.saveRef(elemValue)
-			fmt.Printf("cnt=%d: %s\n", u.cnt, u.typeRegistry.typeName(elemType))
+			fmt.Printf("cnt=%d: %s\n", u.cnt, reflex.NameOf(elemType))
 			ref, cnt := u.decodeReference()
 			elemValue.Set(ref)
 
@@ -387,9 +389,9 @@ func (u *Unserializer) decodePointer(elemType reflect.Type, v reflect.Value) {
 		return
 	}
 	var elemValue reflect.Value
-	if meta & meta_prf != 0 {
+	if meta & meta_ref != 0 {
 		//elemValue = u.zeroValueOf(elemType)
-		fmt.Printf("cnt=%d: %s\n", u.cnt, u.typeRegistry.typeName(elemType))
+		fmt.Printf("cnt=%d: %s\n", u.cnt, reflex.NameOf(elemType))
 		elemValue, _ = u.decodeReference()
 		//elemValue.Set(ref)
 		u.saveRef(elemValue)

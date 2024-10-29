@@ -5,6 +5,8 @@ import (
 	"reflect"
 	"sync"
 	"unsafe"
+
+	"github.com/URALINNOVATSIYA/reflex"
 )
 
 type TypeRegistry struct {
@@ -73,7 +75,7 @@ func (r *TypeRegistry) RegisterTypeOf(v any) {
 }
 
 func (r *TypeRegistry) RegisterType(t reflect.Type) {
-	name := r.typeName(t)
+	name := reflex.NameOf(t)
 	if _, exists := r.typeIdByName(name); exists {
 		return
 	}
@@ -85,7 +87,7 @@ func (r *TypeRegistry) RegisterFunc(f any) {
 	if v.Kind() != reflect.Func {
 		panic(fmt.Errorf("argument of RegisterFunc is not function"))
 	}
-	name := r.funcName(v)
+	name := reflex.FuncNameOf(v)
 	if _, exists := r.typeIdByName(name); exists {
 		return
 	}
@@ -106,12 +108,12 @@ func (r *TypeRegistry) typeIdByValue(v reflect.Value) int {
 	var name string
 	var t reflect.Type
 	if v.Kind() == reflect.Func {
-		name = r.funcName(v)
+		name = reflex.FuncNameOf(v)
 	} else {
 		if v.IsValid() {
 			t = v.Type()
 		}
-		name = r.typeName(t)
+		name = reflex.NameOf(t)
 	}
 	if id, exists := r.typeIdByName(name); exists {
 		return id
@@ -170,59 +172,6 @@ func (r *TypeRegistry) assignTypeId(name string) int {
 		r.ids[name] = id
 	}
 	return id
-}
-
-func (r *TypeRegistry) funcName(v reflect.Value) string {
-	name := funcName(v)
-	if name == "" {
-		name = r.typeName(v.Type())
-	}
-	return name
-}
-
-func (r *TypeRegistry) typeName(t reflect.Type) string {
-	if t == nil {
-		return "nil"
-	}
-	if t.Name() != "" {
-		name := t.Name()
-		if t.PkgPath() != "" {
-			name = t.PkgPath() + "." + name
-		}
-		return name
-	}
-	switch t.Kind() {
-	case reflect.Invalid:
-		return "<nil>"
-	case reflect.Pointer:
-		return "*" + r.typeName(t.Elem())
-	case reflect.Slice:
-		return "[]" + r.typeName(t.Elem())
-	case reflect.Array:
-		return fmt.Sprintf("[%d]%s", t.Len(), r.typeName(t.Elem()))
-	case reflect.Map:
-		return fmt.Sprintf("map[%s]%s", r.typeName(t.Key()), r.typeName(t.Elem()))
-	case reflect.Struct:
-		f := ""
-		for i, numFields := 0, t.NumField(); i < numFields; i++ {
-			field := t.Field(i)
-			if i > 0 {
-				f += "; "
-			}
-			f += fmt.Sprintf("%s %s", field.Name, r.typeName(t.Field(i).Type))
-		}
-		return fmt.Sprintf("struct { %s }", f)
-	case reflect.Chan:
-		switch t.ChanDir() {
-		case reflect.BothDir:
-			return "chan " + r.typeName(t.Elem())
-		case reflect.RecvDir:
-			return "<-chan" + r.typeName(t.Elem())
-		default:
-			return "chan<-" + r.typeName(t.Elem())
-		}
-	}
-	return t.String()
 }
 
 func GetDefaultTypeRegistry() *TypeRegistry {

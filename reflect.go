@@ -2,7 +2,6 @@ package codec
 
 import (
 	"reflect"
-	"runtime"
 	"unsafe"
 )
 
@@ -87,13 +86,6 @@ func isCommonType(t reflect.Type) bool {
 	return false
 }
 
-func funcName(f reflect.Value) string {
-	if f.Kind() != reflect.Func {
-		return ""
-	}
-	return runtime.FuncForPC(f.Pointer()).Name()
-}
-
 func zeroValueOf(t reflect.Type) reflect.Value {
 	if t == nil {
 		return reflect.Value{}
@@ -108,4 +100,10 @@ func ptrTo(t reflect.Type, v reflect.Value) reflect.Value {
 	p := reflect.New(t)
 	p.Elem().Set(v)
 	return p
+}
+
+func ptr(v reflect.Value) unsafe.Pointer {
+	rv := reflect.ValueOf(v)
+	f := makeExportable(rv.FieldByName("ptr"))
+	return f.Interface().(unsafe.Pointer)
 }

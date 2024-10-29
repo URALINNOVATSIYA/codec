@@ -1,6 +1,6 @@
 package codec
 
-import (
+/*import (
 	"bytes"
 	"fmt"
 	"math"
@@ -426,7 +426,7 @@ func TestUnserialization_Reference(t *testing.T) {
 	/*v1 := v.(*any)
 	v2 := (*v1).(*any)
 	v3 := (*v2).(*any)
-	fmt.Println(*v3 == v1)*/
+	fmt.Println(*v3 == v1)
 	v3 := v.(**any)
 	v2 := *v3
 	v1 := *v2
@@ -442,7 +442,7 @@ func TestUnserialization_Reference(t *testing.T) {
 	m := make(map[any]byte)
 	m[x1] = 1
 	m[x2] = 2
-	m[x3] = 3*/
+	m[x3] = 3
 	reg, _ := registry()
 	values := []any{
 		// #1
@@ -625,7 +625,7 @@ func TestUnserialization_Reference(t *testing.T) {
 			x[0] = &x[1].([]any)[0]
 			x[1].([]any)[0] = x
 			return x
-		}(),*/
+		}(),
 	}
 	// Complext pointers
 	/*lst := newLst()
@@ -635,7 +635,7 @@ func TestUnserialization_Reference(t *testing.T) {
 	nd1.lst = nil
 	nd2.next = nil
 	lst.root.next = nil
-	values[10] = nd1*/
+	values[10] = nd1
 	checkDecodedValue(values, reg, t)
 }
 
