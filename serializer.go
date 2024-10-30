@@ -12,14 +12,16 @@ import (
 
 const (
 	meta_ref   byte = 0b0000_0000 // pseudo type for referenced values
+	meta_fls   byte = 0b0000_0001 // boolean false
+	meta_tru   byte = 0b0000_0011 // boolean true
 	meta_nil   byte = 0b0001_0000 // determines whether underlying value is nil
 	meta_nonil byte = 0b0010_0000 // determines whether underlying value is not nil
 	meta_fixed byte = 0b0100_0000 // for lists that are arrays (i.e. have fixed size)
 )
 
 type valueAddr struct {
-	ptr       unsafe.Pointer
-	typeName  string
+	ptr      unsafe.Pointer
+	typeName string
 }
 
 type encodedPtr struct {
@@ -37,10 +39,10 @@ type Serializer struct {
 	nextId           int
 	valueCount       int
 	containerAddrs   map[valueAddr]int
-	valueAddrs       map[valueAddr]int       
+	valueAddrs       map[valueAddr]int
 	values           map[int]reflect.Value
 	nodes            map[int][]int
-	nmap             map[int]struct{}             
+	nmap             map[int]struct{}
 	ptrs             map[int][]encodedPtr
 	cycles           map[int]int
 	cycleDetector    map[int]int
@@ -95,7 +97,7 @@ func (s *Serializer) Encode(v any) []byte {
 	return append([]byte{version}, bytes...)
 }
 
-func (s *Serializer) encode(v reflect.Value) ([]byte) {
+func (s *Serializer) encode(v reflect.Value) []byte {
 	s.traverse(-1, -1, v)
 	b := s.encodeNodes(-1)
 	return b
@@ -170,7 +172,7 @@ func (s *Serializer) bindValues(id, parentId int) {
 
 func (s *Serializer) traverse(id, parentId int, v reflect.Value) {
 	id, isNew := s.registerValue(v, id, parentId)
-	if isNew {
+	if !isNew {
 		return
 	}
 	switch v.Kind() {
@@ -185,7 +187,6 @@ func (s *Serializer) traverse(id, parentId int, v reflect.Value) {
 	case reflect.Pointer:
 		s.traversePointer(v, id)
 	}
-	return
 }
 
 func (s *Serializer) traverseList(v reflect.Value, id int) {
@@ -214,10 +215,10 @@ func (s *Serializer) traverseMap(v reflect.Value, id int) {
 }
 
 func (s *Serializer) traverseStruct(v reflect.Value, id int) {
-	numField := v.NumField()
 	fieldId := s.nextId
-	s.nextId += numField
-	for i := 0; i < numField; i++ {
+	fieldCount := v.NumField()
+	s.nextId += fieldCount
+	for i := 0; i < fieldCount; i++ {
 		field := v.Field(i)
 		s.registerContainer(field, fieldId)
 		s.traverse(-1, id, field)
@@ -266,9 +267,10 @@ func (s *Serializer) traversePointer(v reflect.Value, id int) {
 }
 
 func (s *Serializer) encodeNodes(parentId int) []byte {
-	var b []byte
 	nodes := s.nodes[parentId]
-	for i := len(nodes)-1; i >= 0; i-- {
+	size := len(nodes)
+	b := c2b(size)
+	for i := size - 1; i >= 0; i-- {
 		id := nodes[i]
 		b = append(b, c2b(id)...)
 		b = append(b, s.encodeNode(id)...)
@@ -278,10 +280,10 @@ func (s *Serializer) encodeNodes(parentId int) []byte {
 
 func (s *Serializer) encodeNode(id int) []byte {
 	v := s.values[id]
-	if b := s.encodeValue(v, id); b[0] != meta_ref {
+	if b := s.encodeValue(v, id); b != nil {
 		return append(s.encodeType(v), b...)
 	}
-	return nil
+	return s.encodeReference(id)
 }
 
 func (s *Serializer) encodeType(v reflect.Value) []byte {
@@ -290,7 +292,7 @@ func (s *Serializer) encodeType(v reflect.Value) []byte {
 
 func (s *Serializer) encodeValue(v reflect.Value, id int) []byte {
 	if _, exists := s.nmap[id]; exists {
-		return s.encodeReference(id)
+		return nil
 	}
 	s.nmap[id] = struct{}{}
 	switch v.Kind() {
@@ -327,7 +329,7 @@ func (s *Serializer) encodeValue(v reflect.Value, id int) []byte {
 	case reflect.Complex64:
 		return s.encodeComplex64(v)
 	case reflect.Complex128:
-		return s.encodeComplex128(v)	
+		return s.encodeComplex128(v)
 	case reflect.Uintptr:
 		return s.encodeUintptr(v)
 	case reflect.UnsafePointer:
@@ -347,7 +349,7 @@ func (s *Serializer) encodeValue(v reflect.Value, id int) []byte {
 	case reflect.Pointer:
 		//bytes = s.encodePointer(v)
 	}
-	return nil
+	panic("unrecognized value kind")
 }
 
 func (s *Serializer) encodeNil() []byte {
@@ -356,9 +358,9 @@ func (s *Serializer) encodeNil() []byte {
 
 func (s *Serializer) encodeBool(v reflect.Value) []byte {
 	if v.Bool() {
-		return []byte{3}
+		return []byte{meta_tru}
 	}
-	return []byte{1}
+	return []byte{meta_fls}
 }
 
 func (s *Serializer) encodeString(v reflect.Value) []byte {
@@ -554,7 +556,9 @@ func (s *Serializer) encodeStructNameMode(v reflect.Value) []byte {
 
 func (s *Serializer) encodeStructDefaultMode(id int) []byte {
 	fields := s.nodes[id]
-	b := c2b(len(fields))
+	size := len(fields)
+	b := c2b(size)
+	b = append(b, c2b(id+size+1)...)
 	for _, fieldId := range fields {
 		b = append(b, s.encodeNode(fieldId)...)
 	}

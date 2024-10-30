@@ -4,7 +4,7 @@ import (
 	"math/bits"
 )
 
-func id(v int) byte {
+func c2b0(v int) byte {
 	return c2b(v)[0]
 }
 
@@ -12,7 +12,28 @@ func c2b(v int) []byte {
 	return u2bs(uint64(v), 4)
 }
 
-// u2bs (uint64 to bytes with size) returns the minimum byte representation of 
+func b2c(b []byte) (int, int) {
+	v, bytes := bs2u(b, 4)
+	return int(v), bytes
+}
+
+func bs2u(b []byte, sizeBits int) (v uint64, length int) {
+	size := len(b)
+	if size == 0 {
+		return 0, -1
+	}
+	length = int(b[0] >> (8 - sizeBits))
+	if size < length {
+		return 0, -1
+	}
+	first := b[0]
+	b[0] = (b[0] << sizeBits) & 0b1111_1111 >> sizeBits
+	v = b2u(b[:length])
+	b[0] = first
+	return
+}
+
+// u2bs (uint64 to bytes with size) returns the minimum byte representation of
 // v with byte size info in big endian
 func u2bs(v uint64, sizeBits int) []byte {
 	valueByteCount, totalByteCount := byteCount(v, sizeBits)

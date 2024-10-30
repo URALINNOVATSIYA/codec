@@ -23,7 +23,7 @@ version encoded_values [ section_indicator ] [ ptr_section ] [ cycle_ptr_section
 связности хранится как отдельное значение в секции encoded_values.
 
 ```
-id type_id encoded_value { id type_id encoded_value }
+value_count id type_id encoded_value { id type_id encoded_value }
 ```
 
 где 

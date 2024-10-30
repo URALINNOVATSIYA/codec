@@ -600,19 +600,19 @@ func TestUnserialization_Reference(t *testing.T) {
 			x[2] = x
 			return x
 		}(),*/
-		// #17
-		/*func() (any, check) {
-			x := []any{nil, nil}
-			x[0] = &x[1]
-			x[1] = x
-			return x, func(res any) bool {
-				v := res.([]any)
-				v[1] = 123
-				return *v[0].(*any) == 123
-			}
-		},*/
-		// #18
-		/*func() any {
+// #17
+/*func() (any, check) {
+	x := []any{nil, nil}
+	x[0] = &x[1]
+	x[1] = x
+	return x, func(res any) bool {
+		v := res.([]any)
+		v[1] = 123
+		return *v[0].(*any) == 123
+	}
+},*/
+// #18
+/*func() any {
 			x := []any{nil, nil, nil}
 			x[0] = &x[1]
 			x[1] = &x[2]
@@ -673,7 +673,7 @@ func TestUnserialization_Ref(t *testing.T) {
 				c2b0(1), c2b0(0), c2b0(2), // mappings 0->2
 				c2b0(1), c2b0(1), c2b0(2), // pointers 1->2
 			}
-			return b, 
+			return b,
 			func() any {
 				v := []any{nil, nil}
 	    		v[0] = &v[1]
@@ -719,7 +719,7 @@ func TestUnserialization_Ref(t *testing.T) {
 			func() any {
 				var v any
 				v = &v
-				return v 
+				return v
 			}(),
 			func(res any) bool {
 				v := res.(*any)

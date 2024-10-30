@@ -35,14 +35,21 @@ type (
 	testRecMap        map[byte]testRecMap
 	testBoolPtr       *bool
 	testRecPtr        *testRecPtr
-	testStruct        struct {
+	testStruct1       struct {
+		f1 int
+		f2 bool
+		F3 string
+		F4 string
+		f5 string
+	}
+	testStruct2 struct {
 		F1 string
 		F2 bool
-		F3 *testStruct
+		F3 *testStruct2
 		F4 any
 		f5 int
 		f6 string
-		f7 *testStruct
+		f7 *testStruct2
 	}
 )
 

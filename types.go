@@ -11,9 +11,9 @@ import (
 
 type TypeRegistry struct {
 	typeAutoReg bool
-	types       map[int]reflect.Type  // registered types
+	types       map[int]reflect.Type           // registered types
 	funcs       map[reflect.Type]reflect.Value // registered functions
-	ids         map[string]int        // type full names and their ids
+	ids         map[string]int                 // type full names and their ids
 	mx          sync.RWMutex
 }
 

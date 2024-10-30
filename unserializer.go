@@ -12,14 +12,13 @@ import (
 )
 
 type Unserializer struct {
-	cnt              uint32
+	typeRegistry     *TypeRegistry
+	structCodingMode byte
+	id               int
 	pos              int
 	size             int
 	data             []byte
-	refs             map[uint32]reflect.Value
-	rels             map[uint32][]uint32
-	typeRegistry     *TypeRegistry
-	structCodingMode byte
+	values           map[int]reflect.Value
 }
 
 func NewUnserializer() *Unserializer {
@@ -55,7 +54,6 @@ func (u *Unserializer) WithStructCodingMode(mode byte) *Unserializer {
 }
 
 func (u *Unserializer) Decode(data []byte) (value any, err error) {
-	fmt.Println("Unserialiation")
 	if data == nil {
 		return nil, io.ErrUnexpectedEOF
 	}
@@ -64,12 +62,11 @@ func (u *Unserializer) Decode(data []byte) (value any, err error) {
 	//		err = fmt.Errorf("%s", e)
 	//	}
 	//}()
+	u.id = 0
 	u.pos = 1 // skip version for now
 	u.data = data
 	u.size = len(data)
-	u.refs = make(map[uint32]reflect.Value)
-	u.rels = make(map[uint32][]uint32)
-	u.cnt = math.MaxUint32
+	u.values = make(map[int]reflect.Value)
 	if v := u.decode(); v.IsValid() {
 		return v.Interface(), nil
 	}
@@ -77,36 +74,46 @@ func (u *Unserializer) Decode(data []byte) (value any, err error) {
 }
 
 func (u *Unserializer) decode() reflect.Value {
-	if u.top() == meta_ref {
-		ref, _ := u.decodeReference()
-		return ref
+	v := u.decodeNodes()
+	return v
+}
+
+func (u *Unserializer) decodeNodes() (v reflect.Value) {
+	count := u.decodeLength()
+	for count > 0 {
+		u.id = u.decodeId()
+		v = u.decodeNode()
+		count--
 	}
-	return u.decodeValue(u.decodeType())
+	return
+}
+
+func (u *Unserializer) decodeId() int {
+	return int(u.decodeCount(4))
+}
+
+func (u *Unserializer) decodeLength() int {
+	return int(u.decodeCount(4))
 }
 
 func (u *Unserializer) decodeType() reflect.Type {
 	return u.typeRegistry.typeById(int(u.decodeCount(3)))
 }
 
-func (u *Unserializer) decodeValue(t reflect.Type) reflect.Value {
-	return u.populateValue(t, u.zeroValueOf(t))
-}
-
-// zeroValueOf returns addressable zero value of type t
-func (u *Unserializer) zeroValueOf(t reflect.Type) reflect.Value {
-	if t == nil {
-		return reflect.Value{}
+func (u *Unserializer) decodeNode() reflect.Value {
+	if u.top() == meta_ref {
+		return u.decodeReference()
 	}
-	return reflect.New(t).Elem()
+	t := u.decodeType()
+	v := reflex.Zero(t)
+	u.values[u.id] = v
+	return u.decodeValue(t, v)
 }
 
-func (u *Unserializer) populateValue(t reflect.Type, v reflect.Value) reflect.Value {
-	u.saveRef(v)
-	fmt.Printf("cnt=%d: %s\n", u.cnt, reflex.NameOf(t))
-	cnt := u.cnt
+func (u *Unserializer) decodeValue(t reflect.Type, v reflect.Value) reflect.Value {
 	switch v.Kind() {
 	case reflect.Invalid:
-		u.decodeNil()	
+		u.decodeNil()
 	case reflect.Bool:
 		u.decodeBool(v)
 	case reflect.String:
@@ -118,17 +125,17 @@ func (u *Unserializer) populateValue(t reflect.Type, v reflect.Value) reflect.Va
 	case reflect.Uint16:
 		u.decodeUint16(v)
 	case reflect.Int16:
-		u.decodeInt16(v)	
+		u.decodeInt16(v)
 	case reflect.Uint32:
 		u.decodeUint32(v)
 	case reflect.Int32:
-		u.decodeInt32(v)		
+		u.decodeInt32(v)
 	case reflect.Uint64:
-		u.decodeUint64(v)	
+		u.decodeUint64(v)
 	case reflect.Int64:
 		u.decodeInt64(v)
 	case reflect.Uint:
-		u.decodeUint(v)	
+		u.decodeUint(v)
 	case reflect.Int:
 		u.decodeInt(v)
 	case reflect.Float32:
@@ -144,29 +151,21 @@ func (u *Unserializer) populateValue(t reflect.Type, v reflect.Value) reflect.Va
 	case reflect.UnsafePointer:
 		u.decodeUnsafePointer(v)
 	case reflect.Chan:
-		u.decodeChan(v)	
+		u.decodeChan(v)
 	case reflect.Func:
 		u.decodeFunc(v)
 	case reflect.Slice, reflect.Array:
-		u.decodeList(t.Elem(), v)
+		//u.decodeList(t.Elem(), v)
 	case reflect.Map:
-		u.decodeMap(t.Key(), t.Elem(), v)
+		//u.decodeMap(t.Key(), t.Elem(), v)
 	case reflect.Struct:
-		u.decodeStruct(v)			
+		u.decodeStruct(v)
 	case reflect.Interface:
-		u.decodeInterface(v)
+		//u.decodeInterface(v)
 	case reflect.Pointer:
-		u.decodePointer(t.Elem(), v)	
+		//u.decodePointer(t.Elem(), v)
 	}
-	u.updateRefValues(cnt, v)
 	return v
-}
-
-func (u *Unserializer) updateRefValues(ref uint32,  v reflect.Value) {
-	for _, c := range u.rels[ref] {
-		reflect.Indirect(u.refs[c]).Set(v)
-		//u.updateRefValues(c, u.refs[c])
-	}
 }
 
 func (u *Unserializer) decodeNil() {
@@ -174,7 +173,7 @@ func (u *Unserializer) decodeNil() {
 }
 
 func (u *Unserializer) decodeBool(v reflect.Value) {
-	v.SetBool(u.readByte() == 1)
+	v.SetBool(u.readByte() == meta_tru)
 }
 
 func (u *Unserializer) decodeString(v reflect.Value) {
@@ -258,8 +257,7 @@ func (u *Unserializer) decodeUnsafePointer(v reflect.Value) {
 }
 
 func (u *Unserializer) decodeChan(v reflect.Value) {
-	meta := u.readByte()
-	if meta & meta_nil != 0 {
+	if u.readByte() == meta_nil {
 		return
 	}
 	cap := u.decodeLength()
@@ -276,18 +274,18 @@ func (u *Unserializer) decodeChan(v reflect.Value) {
 }
 
 func (u *Unserializer) decodeFunc(v reflect.Value) {
-	if u.readByte() & meta_nil == 0 {
+	if u.readByte() == meta_nonil {
 		v.Set(u.typeRegistry.funcByType(v.Type()))
 	}
 }
 
 func (u *Unserializer) decodeList(elemType reflect.Type, v reflect.Value) {
-	meta := u.readByte()
-	if meta & meta_nil != 0 {
+	/*meta := u.readByte()
+	if meta&meta_nil != 0 {
 		return
 	}
 	length := u.decodeLength()
-	if meta & meta_fixed == 0 {
+	if meta&meta_fixed == 0 {
 		v.Set(reflect.MakeSlice(v.Type(), length, length))
 	}
 	var refs []int
@@ -304,14 +302,14 @@ func (u *Unserializer) decodeList(elemType reflect.Type, v reflect.Value) {
 			elemValue.Set(ref)
 
 			var value reflect.Value = elemValue
-			for k := uint32(cnt-1); k != 0; k-- {
+			for k := uint32(cnt - 1); k != 0; k-- {
 				ref := u.refs[k]
 				switch ref.Kind() {
 				case reflect.Pointer:
 					ref.Set(u.ptrTo(ref.Type().Elem(), elemValue))
 				default:
 					ref.Set(value)
-				} 
+				}
 				value = ref
 			}
 
@@ -319,12 +317,12 @@ func (u *Unserializer) decodeList(elemType reflect.Type, v reflect.Value) {
 		} else {
 			u.populateValue(elemType, elemValue)
 		}
-	}
+	}*/
 }
 
 func (u *Unserializer) decodeMap(keyType reflect.Type, valueType reflect.Type, v reflect.Value) {
-	meta := u.readByte()
-	if meta & meta_nil != 0 {
+	/*meta := u.readByte()
+	if meta&meta_nil != 0 {
 		return
 	}
 	length := u.decodeLength()
@@ -339,12 +337,12 @@ func (u *Unserializer) decodeMap(keyType reflect.Type, valueType reflect.Type, v
 	var key, value reflect.Value
 	for i, j := 0, 0; i < length; i++ {
 		if j < refcnt && refs[j] == i {
-			if reftps[j] & 0b01 != 0 {
+			if reftps[j]&0b01 != 0 {
 				key, _ = u.decodeReference()
 			} else {
 				key = u.decodeValue(keyType)
 			}
-			if reftps[j] & 0b10 != 0 {
+			if reftps[j]&0b10 != 0 {
 				value, _ = u.decodeReference()
 			} else {
 				value = u.decodeValue(valueType)
@@ -355,7 +353,7 @@ func (u *Unserializer) decodeMap(keyType reflect.Type, valueType reflect.Type, v
 			value = u.decodeValue(valueType)
 		}
 		v.SetMapIndex(key, value)
-	}
+	}*/
 }
 
 func (u *Unserializer) decodeStruct(v reflect.Value) {
@@ -363,33 +361,39 @@ func (u *Unserializer) decodeStruct(v reflect.Value) {
 	case StructCodingModeIndex:
 	case StructCodingModeName:
 	default:
-		u.decodeStructDefaultMode(v)			
+		u.decodeStructDefaultMode(v)
 	}
 }
 
 func (u *Unserializer) decodeStructDefaultMode(v reflect.Value) {
-	for i, fieldCount := 0, u.decodeLength(); i < fieldCount; i++ {
+	fieldCount := u.decodeLength()
+	valueId := u.decodeId()
+	fieldId := valueId - fieldCount
+	for i := 0; i < fieldCount; i++ {
 		fieldValue := v.Field(i)
 		fieldType := fieldValue.Type()
 		fieldValue = reflect.NewAt(fieldType, unsafe.Pointer(fieldValue.UnsafeAddr())).Elem()
-		u.populateValue(fieldType, fieldValue)
+		u.values[fieldId] = fieldValue
+		u.id = valueId
+		valueId++
+		fieldValue.Set(u.decodeNode())
 	}
 }
 
 func (u *Unserializer) decodeInterface(v reflect.Value) {
-	elem := u.decode()
+	/*elem := u.decode()
 	if elem.IsValid() {
 		v.Set(elem)
-	}
+	}*/
 }
 
 func (u *Unserializer) decodePointer(elemType reflect.Type, v reflect.Value) {
-	meta := u.readByte()
-	if meta & meta_nil != 0 {
+	/*meta := u.readByte()
+	if meta&meta_nil != 0 {
 		return
 	}
 	var elemValue reflect.Value
-	if meta & meta_ref != 0 {
+	if meta&meta_ref != 0 {
 		//elemValue = u.zeroValueOf(elemType)
 		fmt.Printf("cnt=%d: %s\n", u.cnt, reflex.NameOf(elemType))
 		elemValue, _ = u.decodeReference()
@@ -399,50 +403,25 @@ func (u *Unserializer) decodePointer(elemType reflect.Type, v reflect.Value) {
 	} else {
 		elemValue = u.decodeValue(elemType)
 	}
-	v.Set(u.ptrTo(elemType, elemValue))
+	v.Set(u.ptrTo(elemType, elemValue))*/
 	//fmt.Printf("%T, %v\n", v.Interface(), v.Interface())
 }
 
-func (u *Unserializer) decodeReference() (reflect.Value, uint32) {
-	if u.top() == meta_ref {
-		_ = u.readByte() // skip ref type if any
+func (u *Unserializer) decodeReference() reflect.Value {
+	_ = u.readByte() // skip reference indicator
+	id := u.decodeId()
+	if v, exists := u.values[id]; exists {
+		return v
 	}
-	cnt := uint32(u.decodeCount(3))
-	if v, exists := u.refs[cnt]; exists {
-		fmt.Printf("ref to %d\n", cnt)
-		//if u.rels[cnt] != nil {
-			u.rels[cnt] = append(u.rels[cnt], u.cnt)
-		//}
-		return v, cnt
-	}
-	panic(fmt.Errorf("reference #%d is incorrect", u.cnt))
-}
-
-func (u *Unserializer) ptrTo(t reflect.Type, v reflect.Value) reflect.Value {
-	/*if v.CanAddr() {
-		return reflect.NewAt(t, v.Addr().UnsafePointer())
-	}*/
-	p := reflect.New(t)
-	p.Elem().Set(v)
-	return p
-}
-
-func (u *Unserializer) saveRef(v reflect.Value) {
-	u.cnt++
-	u.refs[u.cnt] = v
-}
-
-func (u *Unserializer) decodeLength() int {
-	return int(u.decodeCount(4))
+	panic(fmt.Errorf("reference on node #%d is incorrect", id))
 }
 
 func (u *Unserializer) decodeCount(sizeBits int) uint64 {
-	length := u.top() >> (8 - sizeBits)
-	bytes := u.readBytes(int(length))
-	first := bytes[0]
-	bytes[0] = (bytes[0] << sizeBits) & 0b1111_1111 >> sizeBits
-	cnt := b2u(bytes)
-	bytes[0] = first
+	cnt, length := bs2u(u.data[u.pos:], sizeBits)
+	if length <= 0 {
+		panic(io.ErrUnexpectedEOF)
+	}
+	u.pos += length
 	return cnt
 }
 
