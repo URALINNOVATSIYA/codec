@@ -1104,12 +1104,122 @@ func Test_StructDefaultCodingMode(t *testing.T) {
 			},
 			[]byte{
 				version, c2b0(1), c2b0(0),
-				typeId(testStruct1{}), c2b0(5), c2b0(6),  // testStruct1 header
-				typeId(0), 0b0010_0000, 246,              // testStruct1.f1
-				typeId(false), meta_tru,                  // testStruct1.f2
-				typeId(""), c2b0(3), 'a', 'b', 'c',       // testStruct1.F3
-				typeId(""), c2b0(4), 'a', 'b', 'c', 'd',  // testStruct1.F4
-				meta_ref, c2b0(8),                        // ref to testStruct1.F3
+				typeId(testStruct1{}), c2b0(5), c2b0(6), // testStruct1 header
+				typeId(0), 0b0010_0000, 246, // testStruct1.f1
+				typeId(false), meta_tru, // testStruct1.f2
+				typeId(""), c2b0(3), 'a', 'b', 'c', // testStruct1.F3
+				typeId(""), c2b0(4), 'a', 'b', 'c', 'd', // testStruct1.F4
+				meta_ref, c2b0(8), // ref to testStruct1.F3
+			},
+			nil,
+		},
+	}
+	runTests(items, reg, t)
+}
+
+func Test_PointerToSingleValue(t *testing.T) {
+	reg, typeId := registry()
+	items := []testItem{
+		// #1
+		{
+			(*any)(nil),
+			[]byte{version, c2b0(1), c2b0(0), typeId((*any)(nil)), meta_nil},
+			nil,
+		},
+		// #2
+		{
+			(*byte)(nil),
+			[]byte{version, c2b0(1), c2b0(0), typeId((*byte)(nil)), meta_nil},
+			nil,
+		},
+		// #3
+		{
+			func() any {
+				b := true
+				return &b
+			}(),
+			[]byte{version, c2b0(1), c2b0(0), typeId((*bool)(nil)), meta_nonil, meta_tru},
+			nil,
+		},
+		// #4
+		{
+			func() any {
+				b := byte(255)
+				return &b
+			}(),
+			[]byte{version, c2b0(1), c2b0(0), typeId((*byte)(nil)), meta_nonil, 255},
+			nil,
+		},
+		// #5
+		{
+			func() any {
+				s := "123"
+				return &s
+			}(),
+			[]byte{version, c2b0(1), c2b0(0), typeId((*string)(nil)), meta_nonil, 0b0001_0000 | 3, '1', '2', '3'},
+			nil,
+		},
+		// #6
+		{
+			func() any {
+				var x any = true
+				return &x
+			}(),
+			[]byte{version, c2b0(1), c2b0(0), typeId((*any)(nil)), meta_nonil, typeId(false), meta_tru},
+			nil,
+		},
+		// #7
+		{
+			func() any {
+				b := true
+				return testBoolPtr(&b)
+			}(),
+			[]byte{version, c2b0(1), c2b0(0), typeId(testBoolPtr(nil)), meta_nonil, meta_tru},
+			nil,
+		},
+	}
+	runTests(items, reg, t)
+}
+
+func Test_PointersToTheSameValue(t *testing.T) {
+	reg, typeId := registry()
+	interfaceTypeId := interfaceId(reg)
+	items := []testItem{
+		// #1
+		{
+			func() any {
+				b1 := byte(1)
+				b2 := byte(1)
+				s := &testStruct2{}
+				s.f1 = &b1
+				s.f2 = &b2
+				s.f3 = &b1
+				return s
+			}(),
+			[]byte{
+				version, c2b0(1), c2b0(0), typeId((*testStruct2)(nil)), meta_nonil,
+				c2b0(3), c2b0(5), // testStruct2 header
+				interfaceTypeId, typeId((*byte)(nil)), meta_nonil, 1, // testStruct2.f1 (id = 5)
+				interfaceTypeId, typeId((*byte)(nil)), meta_nonil, 1, // testStruct2.f2 (id = 8)
+				interfaceTypeId, meta_ref, c2b0(6), // testStruct2.f3 is ref to f1 value (id = 11)
+			},
+			nil,
+		},
+		// #2
+		{
+			func() any {
+				b := byte(1)
+				s := &testStruct2{}
+				s.f2 = &b
+				s.f3 = &b
+				return s
+			}(),
+			[]byte{
+				version, c2b0(1), c2b0(0), typeId((*testStruct2)(nil)), meta_nonil,
+				c2b0(3), c2b0(5), // testStruct2 header
+				interfaceTypeId, typeId(nil), meta_nil, // testStruct2.f1 (id = 5)
+				interfaceTypeId, typeId((*byte)(nil)), meta_nonil, 1, // testStruct2.f2 (id = 7)
+				interfaceTypeId, meta_ref, c2b0(8), // testStruct2.f3 is ref to f2 value (id = 10)
 			},
 			nil,
 		},

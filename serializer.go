@@ -46,7 +46,7 @@ type Serializer struct {
 	ptrs             map[int][]encodedPtr
 	cycles           map[int]int
 	cycleDetector    map[int]int
-	cycleCounter     int
+	ptrChainCounter  int
 }
 
 func NewSerializer() *Serializer {
@@ -92,7 +92,7 @@ func (s *Serializer) Encode(v any) []byte {
 	s.ptrs = make(map[int][]encodedPtr)
 	s.cycles = make(map[int]int)
 	s.cycleDetector = make(map[int]int)
-	s.cycleCounter = 0
+	s.ptrChainCounter = 0
 	bytes := s.encode(reflect.ValueOf(v))
 	return append([]byte{version}, bytes...)
 }
@@ -101,12 +101,6 @@ func (s *Serializer) encode(v reflect.Value) []byte {
 	s.traverse(-1, -1, v)
 	b := s.encodeNodes(-1)
 	return b
-
-	/*value, isReferencedValue := s.encodeValue(v)
-	if isReferencedValue {
-		return value, true
-	}
-	return append(s.encodeType(v), value...), false*/
 }
 
 func (s *Serializer) id(id int) int {
@@ -119,22 +113,26 @@ func (s *Serializer) id(id int) int {
 }
 
 func (s *Serializer) address(v reflect.Value) valueAddr {
+	if ptr := s.ptrOf(v); ptr != nil {
+		return valueAddr{
+			ptr,
+			reflex.NameOf(v.Type()),
+		}
+	}
+	return valueAddr{}
+}
+
+func (s *Serializer) ptrOf(v reflect.Value) unsafe.Pointer {
 	if !v.IsValid() {
-		return valueAddr{}
+		return nil
 	}
 	switch v.Kind() {
 	case reflect.Struct, reflect.Array:
-		return valueAddr{
-			reflex.PtrOf(v),
-			reflex.NameOf(v.Type()),
-		}
+		return reflex.PtrOf(v)
 	case reflect.String, reflect.Slice, reflect.Map, reflect.Chan, reflect.Func:
-		return valueAddr{
-			reflex.DirPtrOf(v),
-			reflex.NameOf(v.Type()),
-		}
+		return reflex.DirPtrOf(v)
 	default:
-		return valueAddr{}
+		return nil
 	}
 }
 
@@ -171,11 +169,16 @@ func (s *Serializer) bindValues(id, parentId int) {
 }
 
 func (s *Serializer) traverse(id, parentId int, v reflect.Value) {
+	kind := v.Kind()
+	if kind == reflect.Pointer {
+		s.traversePointer(v, id, parentId)
+		return
+	}
 	id, isNew := s.registerValue(v, id, parentId)
 	if !isNew {
 		return
 	}
-	switch v.Kind() {
+	switch kind {
 	case reflect.Slice, reflect.Array:
 		s.traverseList(v, id)
 	case reflect.Map:
@@ -184,8 +187,6 @@ func (s *Serializer) traverse(id, parentId int, v reflect.Value) {
 		s.traverseStruct(v, id)
 	case reflect.Interface:
 		s.traverseInterface(v, id)
-	case reflect.Pointer:
-		s.traversePointer(v, id)
 	}
 }
 
@@ -227,43 +228,70 @@ func (s *Serializer) traverseStruct(v reflect.Value, id int) {
 }
 
 func (s *Serializer) traverseInterface(v reflect.Value, id int) {
-	if !v.IsNil() {
-		s.traverse(-1, id, v.Elem())
-	}
+	s.traverse(-1, id, v.Elem())
 }
 
-func (s *Serializer) traversePointer(v reflect.Value, id int) {
+func (s *Serializer) traversePointer(v reflect.Value, id, parentId int) {
 	if v.IsNil() {
+		id = s.id(id)
+		s.values[id] = v
+		s.bindValues(id, parentId)
 		return
 	}
+
 	elem := v.Elem()
+	isPtrToPtr := elem.Kind() == reflect.Pointer
 
 	addr := valueAddr{
 		reflex.PtrOf(v),
 		reflex.NameOf(elem.Type()),
 	}
 	nextId, exists := s.containerAddrs[addr]
-	if !exists {
-		if nextId, exists = s.valueAddrs[s.address(elem)]; !exists {
-			nextId = -1
-		}
+	if exists {
+		s.ptrs[s.ptrChainCounter] = append(s.ptrs[s.ptrChainCounter], encodedPtr{id, nextId})
+		s.ptrChainCounter++
+		return
 	}
 
-	s.ptrs[s.cycleCounter] = append(s.ptrs[s.cycleCounter], encodedPtr{id, nextId})
-
-	if elem.Kind() == reflect.Pointer {
-		if cnt, exists := s.cycleDetector[nextId]; exists && cnt == s.cycleCounter {
-			s.cycles[id] = nextId
-			s.cycleCounter++
-			return
-		}
-	} else {
-		s.cycleCounter++
+	if isPtrToPtr {
+		return
 	}
 
-	if nextId >= 0 {
+	s.ptrChainCounter++
+	addr.typeName = reflex.NameOf(v.Type())
+	if nextId, exists = s.valueAddrs[addr]; exists {
+		s.bindValues(nextId, parentId)
+		return
+	}
+
+	id = s.id(id)
+	s.values[id] = v
+	s.valueAddrs[addr] = id
+	s.bindValues(id, parentId)
+	s.traverse(-1, id, elem)
+
+	/*addr = s.address(elem)
+	if nextId, exists = s.valueAddrs[addr]; exists {
+		if isPtrToPtr {
+			if cnt, exists := s.cycleDetector[nextId]; exists && cnt == s.ptrChainCounter {
+				s.cycles[id] = nextId
+				s.ptrChainCounter++
+			} else {
+				s.cycleDetector[nextId] = s.ptrChainCounter
+			}
+		}
+		return
+	}
+
+	nextId = s.id(-1)
+	s.valueAddrs[addr] = nextId
+
+	if isPtrToPtr {
 		s.traverse(nextId, -1, elem)
-	}
+	} else {
+		s.ptrChainCounter++
+		s.traverse(nextId, id, elem)
+	}*/
 }
 
 func (s *Serializer) encodeNodes(parentId int) []byte {
@@ -345,9 +373,9 @@ func (s *Serializer) encodeValue(v reflect.Value, id int) []byte {
 	case reflect.Struct:
 		return s.encodeStruct(v, id)
 	case reflect.Interface:
-		return s.encodeInterface(v, id)
+		return s.encodeInterface(id)
 	case reflect.Pointer:
-		//bytes = s.encodePointer(v)
+		return s.encodePointer(id)
 	}
 	panic("unrecognized value kind")
 }
@@ -565,26 +593,21 @@ func (s *Serializer) encodeStructDefaultMode(id int) []byte {
 	return b
 }
 
-func (s *Serializer) encodeInterface(v reflect.Value, id int) []byte {
-	childs := s.nodes[id]
-	if len(childs) == 0 {
-		return s.encodeNil()
-	}
-	childId := childs[0]
-	return s.encodeNode(childId)
+func (s *Serializer) encodeInterface(id int) []byte {
+	return s.encodeNode(s.nodes[id][0])
 }
 
-func (s *Serializer) encodePointer(v reflect.Value) []byte {
-	/*if v.IsNil() {
+func (s *Serializer) encodePointer(id int) []byte {
+	childs := s.nodes[id]
+	if len(childs) == 0 {
 		return []byte{meta_nil}
 	}
-	value, isRefVal := s.encodeValue(v.Elem())
-	if isRefVal {
-		value[0] = meta_prf
-		return value
+	childId := childs[0]
+	b := s.encodeValue(s.values[childId], childId)
+	if b == nil {
+		b = s.encodeReference(childId)
 	}
-	return append([]byte{0}, value...)*/
-	return nil
+	return append([]byte{meta_nonil}, b...)
 }
 
 func (s *Serializer) encodeReference(id int) []byte {

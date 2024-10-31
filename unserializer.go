@@ -107,17 +107,17 @@ func (u *Unserializer) decodeNode() reflect.Value {
 	t := u.decodeType()
 	v := reflex.Zero(t)
 	u.values[u.id] = v
+	u.id++
 	return u.decodeValue(t, v)
 }
 
 func (u *Unserializer) decodeValue(t reflect.Type, v reflect.Value) reflect.Value {
-	switch v.Kind() {
+	kind := v.Kind()
+	switch kind {
 	case reflect.Invalid:
 		u.decodeNil()
 	case reflect.Bool:
 		u.decodeBool(v)
-	case reflect.String:
-		u.decodeString(v)
 	case reflect.Uint8:
 		u.decodeUint8(v)
 	case reflect.Int8:
@@ -150,20 +150,28 @@ func (u *Unserializer) decodeValue(t reflect.Type, v reflect.Value) reflect.Valu
 		u.decodeUintptr(v)
 	case reflect.UnsafePointer:
 		u.decodeUnsafePointer(v)
-	case reflect.Chan:
-		u.decodeChan(v)
-	case reflect.Func:
-		u.decodeFunc(v)
-	case reflect.Slice, reflect.Array:
-		//u.decodeList(t.Elem(), v)
-	case reflect.Map:
-		//u.decodeMap(t.Key(), t.Elem(), v)
-	case reflect.Struct:
-		u.decodeStruct(v)
-	case reflect.Interface:
-		//u.decodeInterface(v)
-	case reflect.Pointer:
-		//u.decodePointer(t.Elem(), v)
+	default:
+		if u.top() == meta_ref {
+			return u.decodeReference()
+		}
+		switch kind {
+		case reflect.String:
+			u.decodeString(v)
+		case reflect.Chan:
+			u.decodeChan(v)
+		case reflect.Func:
+			u.decodeFunc(v)
+		case reflect.Slice, reflect.Array:
+			//u.decodeList(t.Elem(), v)
+		case reflect.Map:
+			//u.decodeMap(t.Key(), t.Elem(), v)
+		case reflect.Struct:
+			u.decodeStruct(v)
+		case reflect.Interface:
+			u.decodeInterface(v)
+		case reflect.Pointer:
+			u.decodePointer(t.Elem(), v)
+		}
 	}
 	return v
 }
@@ -367,44 +375,33 @@ func (u *Unserializer) decodeStruct(v reflect.Value) {
 
 func (u *Unserializer) decodeStructDefaultMode(v reflect.Value) {
 	fieldCount := u.decodeLength()
-	valueId := u.decodeId()
-	fieldId := valueId - fieldCount
+	u.id = u.decodeId()
+	fieldId := u.id - fieldCount
 	for i := 0; i < fieldCount; i++ {
 		fieldValue := v.Field(i)
 		fieldType := fieldValue.Type()
 		fieldValue = reflect.NewAt(fieldType, unsafe.Pointer(fieldValue.UnsafeAddr())).Elem()
 		u.values[fieldId] = fieldValue
-		u.id = valueId
-		valueId++
 		fieldValue.Set(u.decodeNode())
 	}
 }
 
 func (u *Unserializer) decodeInterface(v reflect.Value) {
-	/*elem := u.decode()
+	elem := u.decodeNode()
 	if elem.IsValid() {
 		v.Set(elem)
-	}*/
+	}
 }
 
 func (u *Unserializer) decodePointer(elemType reflect.Type, v reflect.Value) {
-	/*meta := u.readByte()
-	if meta&meta_nil != 0 {
+	if u.readByte() == meta_nil {
 		return
 	}
-	var elemValue reflect.Value
-	if meta&meta_ref != 0 {
-		//elemValue = u.zeroValueOf(elemType)
-		fmt.Printf("cnt=%d: %s\n", u.cnt, reflex.NameOf(elemType))
-		elemValue, _ = u.decodeReference()
-		//elemValue.Set(ref)
-		u.saveRef(elemValue)
-		//fmt.Printf("%T, %v\n", elemValue.Interface(), elemValue.Interface())
-	} else {
-		elemValue = u.decodeValue(elemType)
-	}
-	v.Set(u.ptrTo(elemType, elemValue))*/
-	//fmt.Printf("%T, %v\n", v.Interface(), v.Interface())
+	u.id++
+	elem := reflex.Zero(elemType)
+	u.values[u.id] = elem
+	elem = u.decodeValue(elemType, elem)
+	v.Set(reflex.PtrTo(elemType, elem))
 }
 
 func (u *Unserializer) decodeReference() reflect.Value {
