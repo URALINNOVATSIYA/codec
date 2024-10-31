@@ -1223,6 +1223,23 @@ func Test_PointersToTheSameValue(t *testing.T) {
 			},
 			nil,
 		},
+		// #3
+		{
+			func() any {
+				s := &testStruct2{}
+				s.f1 = s
+				s.f2 = s
+				return s
+			}(),
+			[]byte{
+				version, c2b0(1), c2b0(0), typeId((*testStruct2)(nil)), meta_nonil,
+				c2b0(3), c2b0(5), // testStruct2 header
+				interfaceTypeId, meta_ref, c2b0(0), // testStruct2.f1 (id = 5) is ref to struct
+				interfaceTypeId, meta_ref, c2b0(0), // testStruct2.f2 (id = 7) is ref to struct
+				interfaceTypeId, typeId(nil), meta_nil, // testStruct2.f3
+			},
+			nil,
+		},
 	}
 	runTests(items, reg, t)
 }

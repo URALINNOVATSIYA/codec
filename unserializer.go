@@ -399,9 +399,9 @@ func (u *Unserializer) decodePointer(elemType reflect.Type, v reflect.Value) {
 	}
 	u.id++
 	elem := reflex.Zero(elemType)
-	u.values[u.id] = elem
-	elem = u.decodeValue(elemType, elem)
 	v.Set(reflex.PtrTo(elemType, elem))
+	u.values[u.id] = elem
+	v.Elem().Set(u.decodeValue(elemType, elem))
 }
 
 func (u *Unserializer) decodeReference() reflect.Value {
