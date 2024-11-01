@@ -11,12 +11,12 @@ import (
 	"github.com/URALINNOVATSIYA/reflex"
 )
 
-type check func(any) bool
+type eq func(any, any) bool
 
 type testItem struct {
 	value any
 	data  []byte
-	check check
+	eq    eq
 }
 
 func runTests(items []testItem, typeRegistry *TypeRegistry, t *testing.T) {
@@ -32,27 +32,43 @@ func runTests(items []testItem, typeRegistry *TypeRegistry, t *testing.T) {
 		actual, err := unserializer.Decode(data)
 		if err != nil {
 			t.Errorf("Test #%d: Decode(%T) raises error: %q", i+1, expected, err)
-		} else {
-			var equals bool
-			if expected != nil {
-				switch reflect.TypeOf(expected).Kind() {
-				case reflect.Chan:
-					equals = channelEqual(expected, actual)
-				case reflect.Func:
-					equals = funcEqual(expected, actual)
-				default:
-					equals = reflect.DeepEqual(expected, actual)
-				}
-			} else {
-				equals = reflect.DeepEqual(expected, actual)
-			}
-			if !equals {
-				t.Errorf("Test #%d: Decode(%T) returns wrong value %T", i+1, expected, actual)
-			} else if item.check != nil && !item.check(actual) {
-				t.Errorf("Test #%d: Decode(%T) returns value of wrong structure", i+1, expected)
-			}
+		} else if !equal(item.eq, expected, actual) {
+			t.Errorf("Test #%d: Decode(%T) returns wrong value %T", i+1, expected, actual)
 		}
 	}
+}
+
+func equal(customEq eq, expectd, actual any) (result bool) {
+	defer func() {
+		_ = recover()
+	}()
+	if customEq == nil {
+		return defaultEq(expectd, actual)
+	}
+	return customEq(expectd, actual)
+}
+
+func defaultEq(expected, actual any) bool {
+	if expected != nil {
+		switch reflect.TypeOf(expected).Kind() {
+		case reflect.Chan:
+			return chanEqual(expected, actual)
+		case reflect.Func:
+			return funcEqual(expected, actual)
+		}
+	}
+	return reflect.DeepEqual(expected, actual)
+}
+
+func chanEqual(expected any, actual any) bool {
+	if reflex.NameOf(reflect.TypeOf(expected)) != reflex.NameOf(reflect.TypeOf(actual)) {
+		return false
+	}
+	return reflect.ValueOf(expected).Cap() == reflect.ValueOf(actual).Cap()
+}
+
+func funcEqual(expected any, actual any) bool {
+	return reflex.FuncNameOf(reflect.ValueOf(expected)) == reflex.FuncNameOf(reflect.ValueOf(actual))
 }
 
 func registry() (*TypeRegistry, func(v any) byte) {
@@ -69,17 +85,6 @@ func interfaceId(reg *TypeRegistry) byte {
 	}
 	reg.RegisterType(reflect.TypeOf((*any)(nil)).Elem())
 	return interfaceId(reg)
-}
-
-func channelEqual(expected any, actual any) bool {
-	if reflex.NameOf(reflect.TypeOf(expected)) != reflex.NameOf(reflect.TypeOf(actual)) {
-		return false
-	}
-	return reflect.ValueOf(expected).Cap() == reflect.ValueOf(actual).Cap()
-}
-
-func funcEqual(expected any, actual any) bool {
-	return reflex.FuncNameOf(reflect.ValueOf(expected)) == reflex.FuncNameOf(reflect.ValueOf(actual))
 }
 
 func Test_Nil(t *testing.T) {
@@ -1117,6 +1122,57 @@ func Test_StructDefaultCodingMode(t *testing.T) {
 	runTests(items, reg, t)
 }
 
+func Test_ReferenceToTheSameValue(t *testing.T) {
+	reg, typeId := registry()
+	interfaceTypeId := interfaceId(reg)
+	items := []testItem{
+		// #1
+		{
+			func() any {
+				s := testStruct2{}
+				s.f1 = registry
+				s.f2 = registry
+				return s
+			}(),
+			[]byte{
+				version, c2b0(1), c2b0(0),
+				typeId(testStruct2{}), c2b0(3), c2b0(4),       // testStruct2 header
+				interfaceTypeId, typeId(registry), meta_nonil, // testStruct1.f1 (id = 4)
+				interfaceTypeId, meta_ref, c2b0(5),            // testStruct2.f2 (id = 6)
+				interfaceTypeId, typeId(nil), meta_nil,        // testStruct2.f3 (id = 8)
+			},
+			func(expected, actual any) bool {
+				e := expected.(testStruct2)
+				a := actual.(testStruct2)
+				return funcEqual(e.f1, a.f1) && funcEqual(e.f2, a.f2) && a.f3 == nil
+			},
+		},
+		// #2
+		{
+			func() any {
+				ch := make(chan<- byte, 15)
+				s := testStruct2{}
+				s.f2 = ch
+				s.f3 = ch
+				return s
+			}(),
+			[]byte{
+				version, c2b0(1), c2b0(0),
+				typeId(testStruct2{}), c2b0(3), c2b0(4),       // testStruct2 header
+				interfaceTypeId, typeId(nil), meta_nil,        // testStruct1.f1 (id = 4)
+				interfaceTypeId, typeId((chan<- byte)(nil)), meta_nonil, c2b0(15), // testStruct2.f2 (id = 6)
+				interfaceTypeId, meta_ref, c2b0(7),            // testStruct2.f3 (id = 8)
+			},
+			func(expected, actual any) bool {
+				e := expected.(testStruct2)
+				a := actual.(testStruct2)
+				return chanEqual(e.f2, a.f2) && chanEqual(e.f3, a.f3) && a.f1 == nil
+			},
+		},
+	}
+	runTests(items, reg, t)
+}
+
 func Test_PointerToSingleValue(t *testing.T) {
 	reg, typeId := registry()
 	items := []testItem{
@@ -1239,6 +1295,210 @@ func Test_PointersToTheSameValue(t *testing.T) {
 				interfaceTypeId, typeId(nil), meta_nil, // testStruct2.f3
 			},
 			nil,
+		},
+	}
+	runTests(items, reg, t)
+}
+
+func Test_PointerChain(t *testing.T) {
+	reg, typeId := registry()
+	items := []testItem{
+		// #1
+		{
+			func() any {
+				var x1, x2 any
+				y := byte(111)
+				x1 = &x2
+				x2 = &y
+				return x1
+			}(),
+			[]byte{
+				version, c2b0(1), c2b0(0),
+				typeId((*any)(nil)), meta_nonil,       // x1
+				typeId((*byte)(nil)), meta_nonil, 111, // x2
+			},
+			nil,
+		},
+		// #2
+		{
+			func() any {
+				var x1, x2, x3 any
+				y := byte(111)
+				x1 = &x2
+				x2 = &x3
+				x3 = &y
+				return x1
+			}(),
+			[]byte{
+				version, c2b0(1), c2b0(0),
+				typeId((*any)(nil)), meta_nonil,       // x1
+				typeId((*any)(nil)), meta_nonil,       // x2
+				typeId((*byte)(nil)), meta_nonil, 111, // x3
+			},
+			nil,
+		},
+	}
+	runTests(items, reg, t)
+}
+
+func Test_CyclicPointerChain(t *testing.T) {
+	reg, typeId := registry()
+	items := []testItem{
+		// #1
+		{
+			func() any {
+				var x any
+				x = &x
+				return x
+			}(),
+			[]byte{version, c2b0(1), c2b0(0), typeId((*any)(nil)), meta_nonil, meta_ref, c2b0(0)},
+			func(_, actual any) bool {
+				v := actual.(*any)
+				return v == *v
+			},
+		},
+		// #2
+		{
+			func() any {
+				var x1, x2 any
+				x1 = &x2
+				x2 = &x1
+				return x1
+			}(),
+			[]byte{
+				version, c2b0(1), c2b0(0),
+				typeId((*any)(nil)), meta_nonil,                    // x1
+				typeId((*any)(nil)), meta_nonil, meta_ref, c2b0(0), // x2
+			},
+			func (_, actual any) bool {
+				x1 := actual.(*any)
+				x2 := (*x1).(*any)
+				return *x2 == x1 && x2 != x1
+			},
+		},
+		// #3
+		{
+			func() any {
+				var x1, x2, x3 any
+				x1 = &x2
+				x2 = &x3
+				x3 = &x1
+				return x1
+			}(),
+			[]byte{
+				version, c2b0(1), c2b0(0),
+				typeId((*any)(nil)), meta_nonil,                    // x1
+				typeId((*any)(nil)), meta_nonil,                    // x2
+				typeId((*any)(nil)), meta_nonil, meta_ref, c2b0(0), // x3
+			},
+			func(_, actual any) bool {
+				x1 := actual.(*any)
+				x2 := (*x1).(*any)
+				x3 := (*x2).(*any)
+				return *x3 == x1 && x1 != x2 && x2 != x3
+			},
+		},
+		// #4 
+		{
+			func() any {
+				var x testRecPtr
+				x = &x
+				return x
+			}(),
+			[]byte{version, c2b0(1), c2b0(0), typeId(testRecPtr(nil)), meta_nonil, meta_ref, c2b0(0)},
+			func(_, actual any) bool {
+				v := actual.(testRecPtr)
+				return v == *v
+			},
+		},
+		// #5
+		{
+			func() any {
+				var x1, x2 testRecPtr
+				x1 = &x2
+				x2 = &x1
+				return x1
+			}(),
+			[]byte{
+				version, c2b0(1), c2b0(0),
+				typeId(testRecPtr(nil)), meta_nonil, // x1
+				meta_nonil, meta_ref, c2b0(0),       // x2
+			},
+			func (_, actual any) bool {
+				x1 := actual.(testRecPtr)
+				x2 := *x1
+				return *x2 == x1 && x2 != x1
+			},
+		},
+		// #6
+		{
+			func() any {
+				var x1, x2, x3 testRecPtr
+				x1 = &x2
+				x2 = &x3
+				x3 = &x1
+				return x1
+			}(),
+			[]byte{
+				version, c2b0(1), c2b0(0),
+				typeId(testRecPtr(nil)), meta_nonil, // x1
+				meta_nonil,                          // x2
+				meta_nonil, meta_ref, c2b0(0),       // x3
+			},
+			func(_, actual any) bool {
+				x1 := actual.(testRecPtr)
+				x2 := *x1
+				x3 := *x2
+				return *x3 == x1 && x1 != x2 && x2 != x3
+			},
+		},
+		// #7
+		{
+			func() any {
+				var x1 any
+				var x2 *any
+				var x3 **any
+				x2 = &x1
+				x3 = &x2
+				x1 = x3
+				return x3
+			}(),
+			[]byte{
+				version, c2b0(1), c2b0(0),
+				typeId((**any)(nil)), meta_nonil, // x3
+				meta_nonil,                       // x2
+				meta_ref, c2b0(0),                // x1 == x3
+			},
+			func(_, actual any) bool {
+				x3 := actual.(**any)
+				x2 := *x3
+				x1 := *x2
+				return x1 == x3
+			},
+		},
+		// #8
+		{
+			func() any {
+				var x1 any
+				var x2 *any
+				var x3 **any
+				x2 = &x1
+				x3 = &x2
+				x1 = &x3
+				return x3
+			}(),
+			[]byte{
+				version, c2b0(1), c2b0(0),
+				typeId((**any)(nil)), meta_nonil,                     // x3
+				meta_nonil,                                           // x2
+				typeId((***any)(nil)), meta_nonil, meta_ref, c2b0(0), // x1 == x3
+			},
+			func(_, actual any) bool {
+				x3 := actual.(**any)
+				x2 := *x3
+				x1 := *x2
+				return *x1.(***any) == x3
+			},
 		},
 	}
 	runTests(items, reg, t)

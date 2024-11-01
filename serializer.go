@@ -240,26 +240,29 @@ func (s *Serializer) traversePointer(v reflect.Value, id, parentId int) {
 	}
 
 	elem := v.Elem()
-	isPtrToPtr := elem.Kind() == reflect.Pointer
+	//isPtrToPtr := elem.Kind() == reflect.Pointer
 
-	addr := valueAddr{
+	/*addr := valueAddr{
 		reflex.PtrOf(v),
 		reflex.NameOf(elem.Type()),
-	}
-	nextId, exists := s.containerAddrs[addr]
+	}*/
+	/*nextId, exists := s.containerAddrs[addr]
 	if exists {
 		s.ptrs[s.ptrChainCounter] = append(s.ptrs[s.ptrChainCounter], encodedPtr{id, nextId})
 		s.ptrChainCounter++
 		return
-	}
+	}*/
 
-	if isPtrToPtr {
+	/*if isPtrToPtr {
 		return
-	}
+	}*/
 
 	s.ptrChainCounter++
-	addr.typeName = reflex.NameOf(v.Type())
-	if nextId, exists = s.valueAddrs[addr]; exists {
+	addr := valueAddr{
+		reflex.DirPtrOf(v),
+		reflex.NameOf(v.Type()),
+	}
+	if nextId, exists := s.valueAddrs[addr]; exists {
 		s.bindValues(nextId, parentId)
 		return
 	}
