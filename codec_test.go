@@ -1618,6 +1618,28 @@ func Test_PointerToContainer(t *testing.T) {
 				return *s.f2.(*any) == s.f1 && *s.f3.(*any) == s.f1
 			},
 		},
+		// #5
+		{
+			func() any {
+				s := &testStruct2{}
+				s.f1 = &s.f1
+				return s
+			}(),
+			[]byte{
+				version, c2b0(1), c2b0(0), typeId((*testStruct2)(nil)), meta_nonil,
+				c2b0(3), c2b0(5),                         // testStruct2 header
+				interfaceTypeId, typeId((*any)(nil)), meta_nonil, meta_ref, c2b0(2), // f1 is ref to f1 (id = 5)
+				interfaceTypeId, typeId(nil), meta_nil,   // f2 (id = 7)
+				interfaceTypeId, typeId(nil), meta_nil,   // f3 (id = 9)
+			},
+			func(expected, actual any) bool {
+				if !defaultEq(expected, actual) {
+					return false
+				}
+				s := actual.(*testStruct2)
+				return *s.f1.(*any) == s.f1 && s.f1 != s
+			},
+		},
 	}
 	runTests(items, reg, t)
 }
