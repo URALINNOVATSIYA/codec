@@ -19,6 +19,7 @@ type Unserializer struct {
 	size             int
 	data             []byte
 	values           map[int]reflect.Value
+	containers       map[int]struct{}
 }
 
 func NewUnserializer() *Unserializer {
@@ -67,6 +68,7 @@ func (u *Unserializer) Decode(data []byte) (value any, err error) {
 	u.data = data
 	u.size = len(data)
 	u.values = make(map[int]reflect.Value)
+	u.containers = make(map[int]struct{})
 	if v := u.decode(); v.IsValid() {
 		return v.Interface(), nil
 	}
@@ -106,8 +108,6 @@ func (u *Unserializer) decodeNode() reflect.Value {
 	}
 	t := u.decodeType()
 	v := reflex.Zero(t)
-	u.values[u.id] = v
-	u.id++
 	return u.decodeValue(t, v)
 }
 
@@ -154,6 +154,8 @@ func (u *Unserializer) decodeValue(t reflect.Type, v reflect.Value) reflect.Valu
 		if u.top() == meta_ref {
 			return u.decodeReference()
 		}
+		u.values[u.id] = v
+		u.id++
 		switch kind {
 		case reflect.String:
 			u.decodeString(v)
@@ -172,7 +174,9 @@ func (u *Unserializer) decodeValue(t reflect.Type, v reflect.Value) reflect.Valu
 		case reflect.Pointer:
 			u.decodePointer(t.Elem(), v)
 		}
+		return v
 	}
+	u.id++
 	return v
 }
 
@@ -380,9 +384,10 @@ func (u *Unserializer) decodeStructDefaultMode(v reflect.Value) {
 	for i := 0; i < fieldCount; i++ {
 		fieldValue := v.Field(i)
 		fieldType := fieldValue.Type()
-		fieldValue = reflect.NewAt(fieldType, unsafe.Pointer(fieldValue.UnsafeAddr())).Elem()
+		fieldValue = reflex.PtrAt(fieldType, fieldValue).Elem()
 		u.values[fieldId] = fieldValue
 		fieldValue.Set(u.decodeNode())
+		fieldId++
 	}
 }
 
@@ -397,11 +402,14 @@ func (u *Unserializer) decodePointer(elemType reflect.Type, v reflect.Value) {
 	if u.readByte() == meta_nil {
 		return
 	}
-	u.id++
-	elem := reflex.Zero(elemType)
-	v.Set(reflex.PtrTo(elemType, elem))
-	u.values[u.id] = elem
-	v.Elem().Set(u.decodeValue(elemType, elem))
+	elemValue := reflex.Zero(elemType)
+	v.Set(reflex.PtrAt(elemType, elemValue))
+	elemValue = u.decodeValue(elemType, elemValue)
+	if (elemValue.Kind() == reflect.Pointer && elemType.Kind() == reflect.Interface) {
+		v.Elem().Set(elemValue)
+	} else {
+		v.Set(reflex.PtrAt(elemType, elemValue))
+	}
 }
 
 func (u *Unserializer) decodeReference() reflect.Value {

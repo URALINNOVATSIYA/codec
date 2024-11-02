@@ -2,6 +2,7 @@ package codec
 
 import (
 	"bytes"
+	"fmt"
 	"math"
 	"reflect"
 	"strings"
@@ -32,20 +33,22 @@ func runTests(items []testItem, typeRegistry *TypeRegistry, t *testing.T) {
 		actual, err := unserializer.Decode(data)
 		if err != nil {
 			t.Errorf("Test #%d: Decode(%T) raises error: %q", i+1, expected, err)
-		} else if !equal(item.eq, expected, actual) {
-			t.Errorf("Test #%d: Decode(%T) returns wrong value %T", i+1, expected, actual)
+		} else if res, err := equal(item.eq, expected, actual); res == false {
+			t.Errorf("Test #%d: Decode(%T) returns wrong value %T (check err: %v)", i+1, expected, actual, err)
 		}
 	}
 }
 
-func equal(customEq eq, expectd, actual any) (result bool) {
+func equal(customEq eq, expectd, actual any) (result bool, err error) {
 	defer func() {
-		_ = recover()
+		if e := recover(); e != nil {
+			err = fmt.Errorf("%s", e)
+		}
 	}()
 	if customEq == nil {
-		return defaultEq(expectd, actual)
+		return defaultEq(expectd, actual), err
 	}
-	return customEq(expectd, actual)
+	return customEq(expectd, actual), err
 }
 
 func defaultEq(expected, actual any) bool {
@@ -1110,11 +1113,11 @@ func Test_StructDefaultCodingMode(t *testing.T) {
 			[]byte{
 				version, c2b0(1), c2b0(0),
 				typeId(testStruct1{}), c2b0(5), c2b0(6), // testStruct1 header
-				typeId(0), 0b0010_0000, 246, // testStruct1.f1
-				typeId(false), meta_tru, // testStruct1.f2
-				typeId(""), c2b0(3), 'a', 'b', 'c', // testStruct1.F3
-				typeId(""), c2b0(4), 'a', 'b', 'c', 'd', // testStruct1.F4
-				meta_ref, c2b0(8), // ref to testStruct1.F3
+				typeId(0), 0b0010_0000, 246,             // testStruct1.f1 (id = 6)
+				typeId(false), meta_tru,                 // testStruct1.f2 (id = 7)
+				typeId(""), c2b0(3), 'a', 'b', 'c',      // testStruct1.F3 (id = 8)
+				typeId(""), c2b0(4), 'a', 'b', 'c', 'd', // testStruct1.F4 (id = 9)
+				meta_ref, c2b0(8),                       // ref to testStruct1.F3 (id = 10)
 			},
 			nil,
 		},
@@ -1498,6 +1501,121 @@ func Test_CyclicPointerChain(t *testing.T) {
 				x2 := *x3
 				x1 := *x2
 				return *x1.(***any) == x3
+			},
+		},
+	}
+	runTests(items, reg, t)
+}
+
+func Test_PointerToContainer(t *testing.T) {
+	reg, typeId := registry()
+	interfaceTypeId := interfaceId(reg)
+	items := []testItem{
+		// #1
+		{
+			func() any {
+				s := &testStruct2{
+					f1: true,
+				}
+				s.f2 = &s.f1
+				s.f3 = &s.f1
+				return s
+			}(),
+			[]byte{
+				version, c2b0(1), c2b0(0), typeId((*testStruct2)(nil)), meta_nonil,
+				c2b0(3), c2b0(5),                         // testStruct2 header
+				interfaceTypeId, typeId(false), meta_tru, // f1 (id = 5)
+				interfaceTypeId, typeId((*any)(nil)), meta_nonil, meta_ref, c2b0(2), // f2 is *f1 (id = 7)
+				interfaceTypeId, meta_ref, c2b0(8),       // f3 is ref to f2 (id = 9)
+			},
+			func(expected, actual any) bool {
+				if !defaultEq(expected, actual) {
+					return false
+				}
+				s := actual.(*testStruct2)
+				s.f1 = false
+				return *s.f2.(*any) == false && *s.f3.(*any) == false
+			},
+		},
+		// #2
+		{
+			func() any {
+				b := true
+				s := &testStruct3{
+					f1: &b,
+				}
+				s.f2 = &s.f1
+				s.f3 = &s.f1
+				return s
+			}(),
+			[]byte{
+				version, c2b0(1), c2b0(0), typeId((*testStruct3)(nil)), meta_nonil,
+				c2b0(3), c2b0(5),                                // testStruct3 header
+				typeId((*bool)(nil)), meta_nonil, meta_tru,      // f1 (id = 5)
+				interfaceTypeId, typeId((**bool)(nil)), meta_nonil, meta_ref, c2b0(2), // f2 is *f1 (id = 7)
+				interfaceTypeId, meta_ref, c2b0(8),              // f3 is ref to f2 (id = 9)
+			},
+			func(expected, actual any) bool {
+				if !defaultEq(expected, actual) {
+					return false
+				}
+				s := actual.(*testStruct3)
+				s.f1 = nil
+				return *s.f2.(**bool) == nil && *s.f3.(**bool) == nil
+			},	
+		},
+		// #3
+		{
+			func() any {
+				var x any = true
+				s := &testStruct4{
+					f1: &x,
+				}
+				s.f2 = &s.f1
+				s.f3 = &s.f1
+				return s
+			}(),
+			[]byte{
+				version, c2b0(1), c2b0(0), typeId((*testStruct4)(nil)), meta_nonil,
+				c2b0(3), c2b0(5),                                // testStruct4 header
+				typeId((*any)(nil)), meta_nonil, typeId(false), meta_tru, // f1 (id = 5)
+				interfaceTypeId, typeId((**any)(nil)), meta_nonil, meta_ref, c2b0(2), // f2 is *f1 (id = 8)
+				interfaceTypeId, meta_ref, c2b0(9),              // f3 is ref to f2 (id = 10)
+			},
+			func(expected, actual any) bool {
+				if !defaultEq(expected, actual) {
+					return false
+				}
+				s := actual.(*testStruct4)
+				*s.f1 = byte(123)
+				return **s.f2.(**any) == *s.f1 && **s.f3.(**any) == *s.f1
+			},
+		},
+		// #4
+		{
+			func() any {
+				var x any = true
+				s := &testStruct2{
+					f1: &x,
+				}
+				s.f2 = &s.f1
+				s.f3 = &s.f1
+				return s
+			}(),
+			[]byte{
+				version, c2b0(1), c2b0(0), typeId((*testStruct2)(nil)), meta_nonil,
+				c2b0(3), c2b0(5),                         // testStruct2 header
+				interfaceTypeId, typeId((*any)(nil)), meta_nonil, typeId(false), meta_tru, // f1 (id = 5)
+				interfaceTypeId, typeId((*any)(nil)), meta_nonil, meta_ref, c2b0(2),       // f2 is *f1 (id = 9)
+				interfaceTypeId, meta_ref, c2b0(10),       // f3 is ref to f2 (id = 11)
+			},
+			func(expected, actual any) bool {
+				if !defaultEq(expected, actual) {
+					return false
+				}
+				s := actual.(*testStruct2)
+				s.f1 = byte(123)
+				return *s.f2.(*any) == s.f1 && *s.f3.(*any) == s.f1
 			},
 		},
 	}

@@ -240,24 +240,7 @@ func (s *Serializer) traversePointer(v reflect.Value, id, parentId int) {
 	}
 
 	elem := v.Elem()
-	//isPtrToPtr := elem.Kind() == reflect.Pointer
 
-	/*addr := valueAddr{
-		reflex.PtrOf(v),
-		reflex.NameOf(elem.Type()),
-	}*/
-	/*nextId, exists := s.containerAddrs[addr]
-	if exists {
-		s.ptrs[s.ptrChainCounter] = append(s.ptrs[s.ptrChainCounter], encodedPtr{id, nextId})
-		s.ptrChainCounter++
-		return
-	}*/
-
-	/*if isPtrToPtr {
-		return
-	}*/
-
-	s.ptrChainCounter++
 	addr := valueAddr{
 		reflex.DirPtrOf(v),
 		reflex.NameOf(v.Type()),
@@ -266,11 +249,35 @@ func (s *Serializer) traversePointer(v reflect.Value, id, parentId int) {
 		s.bindValues(nextId, parentId)
 		return
 	}
-
 	id = s.id(id)
 	s.values[id] = v
 	s.valueAddrs[addr] = id
 	s.bindValues(id, parentId)
+
+	//isPtrToPtr := elem.Kind() == reflect.Pointer
+
+	addr = valueAddr{
+		reflex.PtrOf(v),
+		reflex.NameOf(elem.Type()),
+	}
+	nextId, exists := s.containerAddrs[addr]
+	if exists {
+		//s.ptrs[s.ptrChainCounter] = append(s.ptrs[s.ptrChainCounter], encodedPtr{id, nextId})
+		//s.ptrChainCounter++
+		id = s.id(id)
+		s.values[id] = v
+		s.bindValues(nextId, id)
+		return
+	}
+
+	/*if isPtrToPtr {
+		return
+	}*/
+
+	//s.ptrChainCounter++
+	
+
+	
 	s.traverse(-1, id, elem)
 
 	/*addr = s.address(elem)
@@ -588,10 +595,13 @@ func (s *Serializer) encodeStructNameMode(v reflect.Value) []byte {
 func (s *Serializer) encodeStructDefaultMode(id int) []byte {
 	fields := s.nodes[id]
 	size := len(fields)
+	id++
 	b := c2b(size)
-	b = append(b, c2b(id+size+1)...)
+	b = append(b, c2b(id+size)...)
 	for _, fieldId := range fields {
+		s.nmap[id] = struct{}{}
 		b = append(b, s.encodeNode(fieldId)...)
+		id++
 	}
 	return b
 }
