@@ -1594,20 +1594,18 @@ func Test_PointerToContainer(t *testing.T) {
 		// #4
 		{
 			func() any {
-				var x any = true
-				s := &testStruct2{
-					f1: &x,
-				}
+				s := &testStruct2{}
+				s.f1 = s
 				s.f2 = &s.f1
 				s.f3 = &s.f1
 				return s
 			}(),
 			[]byte{
 				version, c2b0(1), c2b0(0), typeId((*testStruct2)(nil)), meta_nonil,
-				c2b0(3), c2b0(5),                         // testStruct2 header
-				interfaceTypeId, typeId((*any)(nil)), meta_nonil, typeId(false), meta_tru, // f1 (id = 5)
-				interfaceTypeId, typeId((*any)(nil)), meta_nonil, meta_ref, c2b0(2),       // f2 is *f1 (id = 9)
-				interfaceTypeId, meta_ref, c2b0(10),       // f3 is ref to f2 (id = 11)
+				c2b0(3), c2b0(5),                    // testStruct2 header
+				interfaceTypeId, meta_ref, c2b0(0),  // f1 is ref to s (id = 5)
+				interfaceTypeId, typeId((*any)(nil)), meta_nonil, meta_ref, c2b0(2), // f2 is *f1 (id = 6)
+				interfaceTypeId, meta_ref, c2b0(7), // f3 is ref to f2 (id = 11)
 			},
 			func(expected, actual any) bool {
 				if !defaultEq(expected, actual) {

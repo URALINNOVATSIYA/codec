@@ -416,6 +416,7 @@ func (u *Unserializer) decodeReference() reflect.Value {
 	_ = u.readByte() // skip reference indicator
 	id := u.decodeId()
 	if v, exists := u.values[id]; exists {
+		u.id++
 		return v
 	}
 	panic(fmt.Errorf("reference on node #%d is incorrect", id))
