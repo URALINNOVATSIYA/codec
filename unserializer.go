@@ -76,18 +76,8 @@ func (u *Unserializer) Decode(data []byte) (value any, err error) {
 }
 
 func (u *Unserializer) decode() reflect.Value {
-	v := u.decodeNodes()
+	v := u.decodeNode()
 	return v
-}
-
-func (u *Unserializer) decodeNodes() (v reflect.Value) {
-	count := u.decodeLength()
-	for count > 0 {
-		u.id = u.decodeId()
-		v = u.decodeNode()
-		count--
-	}
-	return
 }
 
 func (u *Unserializer) decodeId() int {
@@ -378,16 +368,14 @@ func (u *Unserializer) decodeStruct(v reflect.Value) {
 }
 
 func (u *Unserializer) decodeStructDefaultMode(v reflect.Value) {
-	fieldCount := u.decodeLength()
-	u.id = u.decodeId()
-	fieldId := u.id - fieldCount
+	fieldCount := v.NumField()
 	for i := 0; i < fieldCount; i++ {
 		fieldValue := v.Field(i)
 		fieldType := fieldValue.Type()
 		fieldValue = reflex.PtrAt(fieldType, fieldValue).Elem()
-		u.values[fieldId] = fieldValue
+		u.values[u.id] = fieldValue
+		u.id++
 		fieldValue.Set(u.decodeNode())
-		fieldId++
 	}
 }
 

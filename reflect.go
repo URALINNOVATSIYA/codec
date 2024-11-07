@@ -2,40 +2,9 @@ package codec
 
 import (
 	"reflect"
-	"unsafe"
 )
 
-const maskFlagRO = ^uintptr(96)
-
-var flagOffset uintptr
-var hasFlagField bool
-
 var serializableInterfaceType = reflect.TypeOf((*Serializable)(nil)).Elem()
-
-func determineReflectValueFlagOffset() {
-	if field, ok := reflect.TypeOf(reflect.Value{}).FieldByName("flag"); ok {
-		flagOffset = field.Offset
-		hasFlagField = true
-	} else {
-		hasFlagField = false
-	}
-}
-
-func makeExportable(v reflect.Value) reflect.Value {
-	if hasFlagField {
-		flag := (*uintptr)(unsafe.Pointer(uintptr(unsafe.Pointer(&v)) + flagOffset))
-		*flag &= maskFlagRO
-	}
-	return v
-}
-
-func setValue(oldValue reflect.Value, newValue reflect.Value) {
-	oldValue.Set(makeExportable(newValue))
-}
-
-func changeValue(oldValue reflect.Value, newValue any) {
-	oldValue.Set(reflect.ValueOf(newValue).Convert(oldValue.Type()))
-}
 
 func isSerializable(v reflect.Value) bool {
 	if v.IsValid() {
@@ -84,26 +53,4 @@ func isCommonType(t reflect.Type) bool {
 		return true
 	}
 	return false
-}
-
-func zeroValueOf(t reflect.Type) reflect.Value {
-	if t == nil {
-		return reflect.Value{}
-	}
-	return reflect.New(t).Elem()
-}
-
-func ptrTo(t reflect.Type, v reflect.Value) reflect.Value {
-	//if v.CanAddr() {
-	//return reflect.NewAt(t, v.Addr().UnsafePointer())
-	//}
-	p := reflect.New(t)
-	p.Elem().Set(v)
-	return p
-}
-
-func ptr(v reflect.Value) unsafe.Pointer {
-	rv := reflect.ValueOf(v)
-	f := makeExportable(rv.FieldByName("ptr"))
-	return f.Interface().(unsafe.Pointer)
 }
