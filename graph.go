@@ -37,7 +37,7 @@ func (g *graph) renumber(currentNodeId, breakNodeId int) {
 	
 	inc := currentNodeId - maxNodeId
 	dec := maxNodeId - breakNodeId + 1
-	g.renumberBorderNodes(maxNodeId+1, breakNodeId, maxNodeId, inc, dec, g.prnts, g.childs)
+	g.renumberBorderNodes(breakNodeId, maxNodeId, inc, dec)
 	prnts := g.renumberParents(breakNodeId, currentNodeId, maxNodeId, inc, dec)
 	childs := g.renumberChilds(breakNodeId, currentNodeId, maxNodeId, inc, dec, prnts)
 	
@@ -68,15 +68,15 @@ func (g *graph) findMaxNodeId(parentNodeId, minNodeId, maxNodeId int, vmap map[i
 	return maxNodeId
 }
 
-func (g *graph) renumberBorderNodes(borderNodeId, startNodeId, turnNodeId, inc, dec int, childs, prnts map[int][]int) {
-	for _, childId := range childs[borderNodeId] {
-		if childId >= startNodeId {
+func (g *graph) renumberBorderNodes(startNodeId, turnNodeId, inc, dec int) {
+	for _, parentId := range g.prnts[turnNodeId+1] {
+		if parentId >= startNodeId {
 			continue
 		}
-		elems := prnts[childId]
-		for i, nodeId := range elems {
-			if nodeId >= startNodeId {
-				elems[i] = g.renumberNodeId(nodeId, turnNodeId, inc, dec)
+		childs := g.childs[parentId]
+		for i, childId := range childs {
+			if childId >= startNodeId {
+				childs[i] = g.renumberNodeId(childId, turnNodeId, inc, dec)
 			}
 		}
 	}
