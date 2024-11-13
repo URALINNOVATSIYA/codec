@@ -393,7 +393,7 @@ func (u *Unserializer) decodePointer(elemType reflect.Type, v reflect.Value) {
 	elemValue := reflex.Zero(elemType)
 	v.Set(reflex.PtrAt(elemType, elemValue))
 	elemValue = u.decodeValue(elemType, elemValue)
-	if (elemValue.Kind() == reflect.Pointer && elemType.Kind() == reflect.Interface) {
+	if elemValue.Kind() == reflect.Pointer && elemType.Kind() == reflect.Interface {
 		v.Elem().Set(elemValue)
 	} else {
 		v.Set(reflex.PtrAt(elemType, elemValue))

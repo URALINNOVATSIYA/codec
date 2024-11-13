@@ -1,26 +1,108 @@
 package codec
 
+import (
+	"reflect"
+	"unsafe"
+)
+
+type valueAddr struct {
+	ptr      unsafe.Pointer
+	typeName string
+}
+
+type nodeValue struct {
+	v    reflect.Value
+	addr valueAddr
+	cntr valueAddr
+}
+
+func (a valueAddr) isValid() bool {
+	return a.ptr != nil
+}
+
 type graph struct {
 	childs map[int][]int
-	prnts map[int][]int
-	vmap map[int]struct{}
+	prnts  map[int][]int
+	vmap   map[int]struct{}
+	values map[int]nodeValue
+	tvals  map[int]nodeValue
+	addrs  map[valueAddr]int
+	cntrs  map[valueAddr]int
 }
 
 func newGraph() *graph {
 	return &graph{
 		childs: make(map[int][]int),
-		prnts: make(map[int][]int),
-		vmap: make(map[int]struct{}),
+		prnts:  make(map[int][]int),
+		vmap:   make(map[int]struct{}),
+		values: make(map[int]nodeValue),
+		addrs:  make(map[valueAddr]int),
+		cntrs:  make(map[valueAddr]int),
 	}
 }
 
-func (g *graph) add(childId, parentId int) {
+func (g *graph) addNodeWithValue(childId, parentId int, value nodeValue) {
+	g.addNode(childId, parentId)
+	g.addNodeValue(childId, value)
+}
+
+func (g *graph) addNode(childId, parentId int) {
 	g.childs[parentId] = append(g.childs[parentId], childId)
 	g.prnts[childId] = append(g.prnts[childId], parentId)
 }
 
-func (g *graph) nodes() map[int][]int {
-	return g.childs
+func (g *graph) addNodeValue(nodeId int, value nodeValue) {
+	g.values[nodeId] = value
+	if value.addr.isValid() {
+		g.addrs[value.addr] = nodeId
+	}
+	if value.cntr.isValid() {
+		g.cntrs[value.cntr] = nodeId
+	}
+}
+
+func (g *graph) updateNodeValue(nodeId int, oldValue, newValue nodeValue) {
+	v := &oldValue
+	if newValue.v.IsValid() {
+		v.v = newValue.v
+	}
+	if newValue.addr.isValid() {
+		if v.addr.isValid() {
+			delete(g.addrs, v.addr)
+		}
+		v.addr = newValue.addr
+		g.addrs[v.addr] = nodeId
+	}
+	if newValue.cntr.isValid() {
+		if v.cntr.isValid() {
+			delete(g.cntrs, v.cntr)
+		}
+		v.cntr = newValue.cntr
+		g.cntrs[v.cntr] = nodeId
+	}
+	g.values[nodeId] = *v
+}
+
+func (g *graph) get(nodeId int) reflect.Value {
+	return g.values[nodeId].v
+}
+
+func (g *graph) nodeValue(nodeId int) nodeValue {
+	return g.values[nodeId]
+}
+
+func (g *graph) children(parentId int) []int {
+	return g.childs[parentId]
+}
+
+func (g *graph) nodeAt(addr valueAddr) (int, bool) {
+	nodeId, exists := g.addrs[addr]
+	return nodeId, exists
+}
+
+func (g *graph) containerNodeAt(addr valueAddr) (int, bool) {
+	nodeId, exists := g.cntrs[addr]
+	return nodeId, exists
 }
 
 func (g *graph) isVisited(nodeId int) bool {
@@ -34,21 +116,24 @@ func (g *graph) visit(nodeId int) {
 
 func (g *graph) renumber(currentNodeId, breakNodeId int) {
 	maxNodeId := g.findMaxNodeId(breakNodeId, breakNodeId, breakNodeId, make(map[int]struct{}))
-	
+
 	inc := currentNodeId - maxNodeId
 	dec := maxNodeId - breakNodeId + 1
+	g.tvals = make(map[int]nodeValue)
+
 	g.renumberBorderNodes(breakNodeId, maxNodeId, inc, dec)
 	prnts := g.renumberParents(breakNodeId, currentNodeId, maxNodeId, inc, dec)
 	childs := g.renumberChilds(breakNodeId, currentNodeId, maxNodeId, inc, dec, prnts)
-	
+
 	currentNodeId -= dec
 	breakNodeId += inc
 	prnts[currentNodeId] = append(prnts[currentNodeId], prnts[breakNodeId]...)
 	prnts[breakNodeId] = []int{currentNodeId}
 	childs[currentNodeId] = []int{breakNodeId}
 
-	g.merge(g.childs, childs)
-	g.merge(g.prnts, prnts)
+	g.childs = g.merge(g.childs, childs)
+	g.prnts = g.merge(g.prnts, prnts)
+	g.restoreMeta()
 }
 
 func (g *graph) findMaxNodeId(parentNodeId, minNodeId, maxNodeId int, vmap map[int]struct{}) int {
@@ -134,14 +219,42 @@ func (g *graph) renumberChilds(startNodeId, endNodeId, turnNodeId, inc, dec int,
 }
 
 func (g *graph) renumberNodeId(nodeId, turnNodeId, inc, dec int) int {
+	id := nodeId
 	if nodeId <= turnNodeId {
-		return nodeId + inc
+		id += inc
+	} else {
+		id -= dec
 	}
-	return nodeId - dec
+	g.rebindMeta(nodeId, id)
+	return id
 }
 
-func (g *graph) merge(nodes1, nodes2 map[int][]int) {
+func (g *graph) rebindMeta(oldNodeId, newNodeId int) {
+	if v, exists := g.values[oldNodeId]; exists {
+		delete(g.values, oldNodeId)
+		g.tvals[newNodeId] = v
+	}
+}
+
+func (g *graph) restoreMeta() {
+	for nodeId, v := range g.tvals {
+		g.values[nodeId] = v
+		if v.addr.isValid() {
+			g.addrs[v.addr] = nodeId
+		}
+		if v.cntr.isValid() {
+			g.cntrs[v.cntr] = nodeId
+		}
+	}
+	g.tvals = nil
+}
+
+func (g *graph) merge(nodes1, nodes2 map[int][]int) map[int][]int {
+	if len(nodes2) > len(nodes1) {
+		nodes1, nodes2 = nodes2, nodes1
+	}
 	for nodeId, nodes := range nodes2 {
 		nodes1[nodeId] = nodes
 	}
+	return nodes1
 }

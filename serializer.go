@@ -19,34 +19,11 @@ const (
 	meta_fixed byte = 0b0100_0000 // for lists that are arrays (i.e. have fixed size)
 )
 
-type valueAddr struct {
-	ptr      unsafe.Pointer
-	typeName string
-}
-
-type encodedPtr struct {
-	from int
-	to   int
-}
-
-func (a valueAddr) isEmpty() bool {
-	return a.ptr == nil
-}
-
 type Serializer struct {
 	typeRegistry     *TypeRegistry
 	structCodingMode byte
-	nextId           int
-	valueCount       int
-	containerAddrs   map[valueAddr]int
-	valueAddrs       map[valueAddr]int
-	values           map[int]reflect.Value
-	nodes            map[int][]int
-	nmap             map[int]struct{}
-	ptrs             map[int][]encodedPtr
-	cycles           map[int]int
-	cycleDetector    map[int]int
-	ptrChainCounter  int
+	nodeId           int
+	values           *graph
 }
 
 func NewSerializer() *Serializer {
@@ -82,17 +59,8 @@ func (s *Serializer) WithStructCodingMode(mode byte) *Serializer {
 }
 
 func (s *Serializer) Encode(v any) []byte {
-	s.nextId = 0
-	s.valueCount = 0
-	s.containerAddrs = make(map[valueAddr]int)
-	s.valueAddrs = make(map[valueAddr]int)
-	s.values = make(map[int]reflect.Value)
-	s.nodes = make(map[int][]int)
-	s.nmap = make(map[int]struct{})
-	s.ptrs = make(map[int][]encodedPtr)
-	s.cycles = make(map[int]int)
-	s.cycleDetector = make(map[int]int)
-	s.ptrChainCounter = 0
+	s.nodeId = 0
+	s.values = newGraph()
 	bytes := s.encode(reflect.ValueOf(v))
 	return append([]byte{version}, bytes...)
 }
@@ -103,9 +71,9 @@ func (s *Serializer) encode(v reflect.Value) []byte {
 	return b
 }
 
-func (s *Serializer) id() int {
-	id := s.nextId
-	s.nextId++
+func (s *Serializer) nextNodeId() int {
+	id := s.nodeId
+	s.nodeId++
 	return id
 }
 
@@ -126,70 +94,66 @@ func (s *Serializer) ptrOf(v reflect.Value) unsafe.Pointer {
 	switch v.Kind() {
 	case reflect.Struct, reflect.Array:
 		return reflex.PtrOf(v)
-	case reflect.String, reflect.Slice, reflect.Map, reflect.Chan, reflect.Func:
+	case reflect.String, reflect.Slice, reflect.Map, reflect.Chan, reflect.Func, reflect.Pointer:
 		return reflex.DirPtrOf(v)
 	default:
 		return nil
 	}
 }
 
-func (s *Serializer) registerContainer(v reflect.Value, id, parentId int) {
+func (s *Serializer) registerContainer(v reflect.Value, nodeId, parentNodeId int) bool {
 	addr := valueAddr{
 		reflex.PtrOf(v),
 		reflex.NameOf(v.Type()),
 	}
-	if _, exists := s.containerAddrs[addr]; exists {
-		// renumber pointers
+	if containerId, exists := s.values.containerNodeAt(addr); exists {
+		s.values.renumber(nodeId, containerId)
+		return false
 	}
-	s.containerAddrs[addr] = id
-	s.bindValues(id, parentId)
+	s.values.addNodeWithValue(nodeId, parentNodeId, nodeValue{cntr: addr})
+	return true
 }
 
-func (s *Serializer) registerValue(v reflect.Value, parentId int) (int, bool) {
+func (s *Serializer) registerValue(v reflect.Value, parentNodeId int) int {
 	addr := s.address(v)
-	if !addr.isEmpty() {
-		if ident, exists := s.valueAddrs[addr]; exists {
-			s.bindValues(ident, parentId)
-			return ident, false
-		}
+	if !addr.isValid() {
+		nodeId := s.nextNodeId()
+		s.values.addNodeWithValue(nodeId, parentNodeId, nodeValue{v: v})
+		return nodeId
 	}
-	id := s.id()
-	s.values[id] = v
-	s.bindValues(id, parentId)
-	if !addr.isEmpty() {
-		s.valueAddrs[addr] = id
+	if nodeId, exists := s.values.nodeAt(addr); exists {
+		s.values.addNode(nodeId, parentNodeId)
+		return -1
 	}
-	return id, true
-}
-
-func (s *Serializer) bindValues(id, parentId int) {
-	s.nodes[parentId] = append(s.nodes[parentId], id)
+	nodeId := s.nextNodeId()
+	s.values.addNodeWithValue(nodeId, parentNodeId, nodeValue{
+		v:    v,
+		addr: addr,
+	})
+	return nodeId
 }
 
 func (s *Serializer) traverse(parentId int, v reflect.Value) {
-	kind := v.Kind()
-	if kind == reflect.Pointer {
-		s.traversePointer(v, parentId)
+	nodeId := s.registerValue(v, parentId)
+	if nodeId < 0 {
 		return
 	}
-	id, isNew := s.registerValue(v, parentId)
-	if !isNew {
-		return
-	}
-	switch kind {
+	switch v.Kind() {
 	case reflect.Slice, reflect.Array:
-		s.traverseList(v, id)
+		s.traverseList(v, nodeId)
 	case reflect.Map:
-		s.traverseMap(v, id)
+		s.traverseMap(v, nodeId)
 	case reflect.Struct:
-		s.traverseStruct(v, id)
+		s.traverseStruct(v, nodeId)
 	case reflect.Interface:
-		s.traverseInterface(v, id)
+		s.traverseInterface(v, nodeId)
+	case reflect.Pointer:
+		s.traversePointer(v, nodeId)
 	}
 }
 
 func (s *Serializer) traverseList(v reflect.Value, id int) {
-	length := v.Len()
+	/*length := v.Len()
 	itemId := s.nextId
 	s.nextId += length
 	for i := 0; i < length; i++ {
@@ -197,125 +161,72 @@ func (s *Serializer) traverseList(v reflect.Value, id int) {
 		s.registerContainer(elem, itemId, id)
 		s.traverse(id, elem)
 		itemId++
-	}
+	}*/
 }
 
 func (s *Serializer) traverseMap(v reflect.Value, id int) {
-	iter := v.MapRange()
+	/*iter := v.MapRange()
 	for iter.Next() {
 		s.traverse(id, iter.Key())
 		s.traverse(id, iter.Value())
-	}
+	}*/
 }
 
-func (s *Serializer) traverseStruct(v reflect.Value, id int) {
+func (s *Serializer) traverseStruct(v reflect.Value, nodeId int) {
 	fieldCount := v.NumField()
 	for i := 0; i < fieldCount; i++ {
 		field := v.Field(i)
-		fieldId := s.id()
-		s.registerContainer(field, fieldId, id)
-		s.traverse(fieldId, field)
+		fieldId := s.nextNodeId()
+		if s.registerContainer(field, fieldId, nodeId) {
+			s.traverse(fieldId, field)
+		}
 		fieldId++
 	}
 }
 
-func (s *Serializer) traverseInterface(v reflect.Value, id int) {
-	s.traverse(id, v.Elem())
+func (s *Serializer) traverseInterface(v reflect.Value, nodeId int) {
+	s.traverse(nodeId, v.Elem())
 }
 
-func (s *Serializer) traversePointer(v reflect.Value, parentId int) {
+func (s *Serializer) traversePointer(v reflect.Value, nodeId int) {
 	if v.IsNil() {
-		id := s.id()
-		s.values[id] = v
-		s.bindValues(id, parentId)
 		return
 	}
-
 	elem := v.Elem()
-
 	addr := valueAddr{
 		reflex.DirPtrOf(v),
-		reflex.NameOf(v.Type()),
-	}
-	if nextId, exists := s.valueAddrs[addr]; exists {
-		s.bindValues(nextId, parentId)
-		return
-	}
-	id := s.id()
-	s.values[id] = v
-	s.valueAddrs[addr] = id
-	s.bindValues(id, parentId)
-
-	//isPtrToPtr := elem.Kind() == reflect.Pointer
-
-	addr = valueAddr{
-		reflex.PtrOf(v),
 		reflex.NameOf(elem.Type()),
 	}
-	nextId, exists := s.containerAddrs[addr]
-	if exists {
-		//s.ptrs[s.ptrChainCounter] = append(s.ptrs[s.ptrChainCounter], encodedPtr{id, nextId})
-		//s.ptrChainCounter++
-		s.values[id] = v
-		s.bindValues(nextId, id)
+	if containerId, exists := s.values.containerNodeAt(addr); exists {
+		s.values.addNodeValue(nodeId, nodeValue{v: v})
+		s.values.addNode(containerId, nodeId)
 		return
 	}
-
-	/*if isPtrToPtr {
-		return
-	}*/
-
-	//s.ptrChainCounter++
-	
-
-	
-	s.traverse(id, elem)
-
-	/*addr = s.address(elem)
-	if nextId, exists = s.valueAddrs[addr]; exists {
-		if isPtrToPtr {
-			if cnt, exists := s.cycleDetector[nextId]; exists && cnt == s.ptrChainCounter {
-				s.cycles[id] = nextId
-				s.ptrChainCounter++
-			} else {
-				s.cycleDetector[nextId] = s.ptrChainCounter
-			}
-		}
-		return
-	}
-
-	nextId = s.id(-1)
-	s.valueAddrs[addr] = nextId
-
-	if isPtrToPtr {
-		s.traverse(nextId, -1, elem)
-	} else {
-		s.ptrChainCounter++
-		s.traverse(nextId, id, elem)
-	}*/
+	s.values.updateNodeValue(nodeId, s.values.nodeValue(nodeId), nodeValue{cntr: addr})
+	s.traverse(nodeId, elem)
 }
 
 func (s *Serializer) encodeNodes() []byte {
-	return s.encodeNode(s.nodes[-1][0])
+	return s.encodeNode(s.values.children(-1)[0])
 }
 
-func (s *Serializer) encodeNode(id int) []byte {
-	v := s.values[id]
-	if b := s.encodeValue(v, id); b != nil {
+func (s *Serializer) encodeNode(nodeId int) []byte {
+	v := s.values.get(nodeId)
+	if b := s.encodeValue(v, nodeId); b != nil {
 		return append(s.encodeType(v), b...)
 	}
-	return s.encodeReference(id)
+	return s.encodeReference(nodeId)
 }
 
 func (s *Serializer) encodeType(v reflect.Value) []byte {
 	return u2bs(uint64(s.typeRegistry.typeIdByValue(v)), 3)
 }
 
-func (s *Serializer) encodeValue(v reflect.Value, id int) []byte {
-	if _, exists := s.nmap[id]; exists {
+func (s *Serializer) encodeValue(v reflect.Value, nodeId int) []byte {
+	if s.values.isVisited(nodeId) {
 		return nil
 	}
-	s.nmap[id] = struct{}{}
+	s.values.visit(nodeId)
 	switch v.Kind() {
 	case reflect.Invalid:
 		return s.encodeNil()
@@ -364,11 +275,11 @@ func (s *Serializer) encodeValue(v reflect.Value, id int) []byte {
 	case reflect.Map:
 		//bytes = s.encodeMap(v)
 	case reflect.Struct:
-		return s.encodeStruct(v, id)
+		return s.encodeStruct(v, nodeId)
 	case reflect.Interface:
-		return s.encodeInterface(id)
+		return s.encodeInterface(nodeId)
 	case reflect.Pointer:
-		return s.encodePointer(id)
+		return s.encodePointer(nodeId)
 	}
 	panic("unrecognized value kind")
 }
@@ -575,26 +486,26 @@ func (s *Serializer) encodeStructNameMode(v reflect.Value) []byte {
 	return nil
 }
 
-func (s *Serializer) encodeStructDefaultMode(id int) []byte {
+func (s *Serializer) encodeStructDefaultMode(nodeId int) []byte {
 	var b []byte
-	for _, fieldId := range s.nodes[id] {
-		s.nmap[fieldId] = struct{}{}
-		b = append(b, s.encodeNode(s.nodes[fieldId][0])...)
+	for _, fieldId := range s.values.children(nodeId) {
+		s.values.visit(fieldId)
+		b = append(b, s.encodeNode(s.values.children(fieldId)[0])...)
 	}
 	return b
 }
 
-func (s *Serializer) encodeInterface(id int) []byte {
-	return s.encodeNode(s.nodes[id][0])
+func (s *Serializer) encodeInterface(nodeId int) []byte {
+	return s.encodeNode(s.values.children(nodeId)[0])
 }
 
-func (s *Serializer) encodePointer(id int) []byte {
-	childs := s.nodes[id]
+func (s *Serializer) encodePointer(nodeId int) []byte {
+	childs := s.values.children(nodeId)
 	if len(childs) == 0 {
 		return []byte{meta_nil}
 	}
 	childId := childs[0]
-	b := s.encodeValue(s.values[childId], childId)
+	b := s.encodeValue(s.values.get(childId), childId)
 	if b == nil {
 		b = s.encodeReference(childId)
 	}
