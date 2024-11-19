@@ -107,7 +107,9 @@ func (s *Serializer) registerContainer(v reflect.Value, nodeId, parentNodeId int
 		reflex.NameOf(v.Type()),
 	}
 	if containerId, exists := s.values.containerNodeAt(addr); exists {
-		s.values.renumber(nodeId, containerId)
+		s.values.addNodeWithValue(nodeId, parentNodeId, nodeValue{v: v, cntr: addr})
+		s.values.renumber(nodeId, containerId+1)
+		s.values.visit(s.values.children(containerId)[0])
 		return false
 	}
 	s.values.addNodeWithValue(nodeId, parentNodeId, nodeValue{cntr: addr})

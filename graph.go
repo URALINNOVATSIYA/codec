@@ -154,14 +154,15 @@ func (g *graph) findMaxNodeId(parentNodeId, minNodeId, maxNodeId int, vmap map[i
 }
 
 func (g *graph) renumberBorderNodes(startNodeId, turnNodeId, inc, dec int) {
-	for _, parentId := range g.prnts[turnNodeId+1] {
+	borderParents := append(g.prnts[turnNodeId+1], g.prnts[startNodeId]...)
+	for _, parentId := range borderParents {
 		if parentId >= startNodeId {
 			continue
 		}
 		childs := g.childs[parentId]
 		for i, childId := range childs {
 			if childId >= startNodeId {
-				childs[i] = g.renumberNodeId(childId, turnNodeId, inc, dec)
+				childs[i] = g.renumberNodeId(childId, turnNodeId, inc-1, dec)
 			}
 		}
 	}
@@ -231,7 +232,6 @@ func (g *graph) renumberNodeId(nodeId, turnNodeId, inc, dec int) int {
 
 func (g *graph) rebindMeta(oldNodeId, newNodeId int) {
 	if v, exists := g.values[oldNodeId]; exists {
-		delete(g.values, oldNodeId)
 		g.tvals[newNodeId] = v
 	}
 }

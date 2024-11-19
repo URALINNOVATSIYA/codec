@@ -1504,7 +1504,7 @@ func Test_CyclicPointerChain(t *testing.T) {
 	runTests(items, reg, t)
 }
 
-func Test_PointerToContainer(t *testing.T) {
+func Test_BackwardPointerToContainer(t *testing.T) {
 	reg, typeId := registry()
 	interfaceTypeId := interfaceId(reg)
 	items := []testItem{
@@ -1628,6 +1628,36 @@ func Test_PointerToContainer(t *testing.T) {
 				}
 				s := actual.(*testStruct2)
 				return *s.f1.(*any) == s.f1 && s.f1 != s
+			},
+		},
+	}
+	runTests(items, reg, t)
+}
+
+func Test_ForwardPointerToContainer(t *testing.T) {
+	reg, typeId := registry()
+	interfaceTypeId := interfaceId(reg)
+	items := []testItem{
+		// #1
+		{
+			func() any {
+				s := &testStruct2{}
+				s.f1 = &s.f3
+				return s
+			}(),
+			[]byte{
+				version, typeId((*testStruct2)(nil)), meta_nonil, // *testStruct2
+				interfaceTypeId, typeId((*any)(nil)), meta_nonil, meta_ref, c2b0(8), // f1 is ref to f3 (id = 2)
+				interfaceTypeId, typeId(nil), meta_nil, // f2 (id = 5)
+				interfaceTypeId, typeId(nil), meta_nil, // f3 (id = 8)
+			},
+			func(expected, actual any) bool {
+				if !defaultEq(expected, actual) {
+					return false
+				}
+				s := actual.(*testStruct2)
+				s.f3 = byte(123)
+				return *s.f1.(*any) == s.f3 && s.f3 == byte(123)
 			},
 		},
 	}
