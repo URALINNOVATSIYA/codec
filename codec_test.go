@@ -1099,7 +1099,7 @@ func Test_Func(t *testing.T) {
 	runTests(items, reg, t)
 }
 
-func Test_StructDefaultCodingMode(t *testing.T) {
+func Test_StructWithoutTags(t *testing.T) {
 	reg, typeId := registry()
 	items := []testItem{
 		{
@@ -1112,12 +1112,12 @@ func Test_StructDefaultCodingMode(t *testing.T) {
 			},
 			[]byte{
 				version,
-				typeId(testStruct1{}),       // testStruct1 header
-				typeId(0), 0b0010_0000, 246, // testStruct1.f1 (id = 2)
-				typeId(false), meta_tru, // testStruct1.f2 (id = 4)
-				typeId(""), c2b0(3), 'a', 'b', 'c', // testStruct1.F3 (id = 6)
-				typeId(""), c2b0(4), 'a', 'b', 'c', 'd', // testStruct1.F4 (id = 8)
-				meta_ref, c2b0(6), // ref to testStruct1.F3 (id = 10)
+				typeId(testStruct1{}), meta_cntr, // testStruct1 header
+				0b0010_0000, 246, // testStruct1.f1 (id = 1)
+				meta_tru,               // testStruct1.f2 (id = 3)
+				c2b0(3), 'a', 'b', 'c', // testStruct1.F3 (id = 5)
+				c2b0(4), 'a', 'b', 'c', 'd', // testStruct1.F4 (id = 7)
+				meta_ref, c2b0(6), // ref to testStruct1.F3 (id = 9)
 			},
 			nil,
 		},
@@ -1127,7 +1127,6 @@ func Test_StructDefaultCodingMode(t *testing.T) {
 
 func Test_ReferenceToTheSameValue(t *testing.T) {
 	reg, typeId := registry()
-	interfaceTypeId := interfaceId(reg)
 	items := []testItem{
 		// #1
 		{
@@ -1139,10 +1138,10 @@ func Test_ReferenceToTheSameValue(t *testing.T) {
 			}(),
 			[]byte{
 				version,
-				typeId(testStruct2{}),                         // testStruct2 header
-				interfaceTypeId, typeId(registry), meta_nonil, // testStruct1.f1 (id = 2)
-				interfaceTypeId, meta_ref, c2b0(3), // testStruct2.f2 (id = 4)
-				interfaceTypeId, typeId(nil), meta_nil, // testStruct2.f3 (id = 6)
+				typeId(testStruct2{}), meta_cntr, // testStruct2 header
+				typeId(registry), meta_nonil, // testStruct1.f1 (id = 1)
+				meta_ref, c2b0(3), // testStruct2.f2 (id = 4)
+				typeId(nil), meta_nil, // testStruct2.f3 (id = 7)
 			},
 			func(expected, actual any) bool {
 				e := expected.(testStruct2)
@@ -1161,10 +1160,10 @@ func Test_ReferenceToTheSameValue(t *testing.T) {
 			}(),
 			[]byte{
 				version,
-				typeId(testStruct2{}),                  // testStruct2 header
-				interfaceTypeId, typeId(nil), meta_nil, // testStruct1.f1 (id = 2)
-				interfaceTypeId, typeId((chan<- byte)(nil)), meta_nonil, c2b0(15), // testStruct2.f2 (id = 4)
-				interfaceTypeId, meta_ref, c2b0(6), // testStruct2.f3 (id = 7)
+				typeId(testStruct2{}), meta_cntr, // testStruct2 header
+				typeId(nil), meta_nil, // testStruct1.f1 (id = 1)
+				typeId((chan<- byte)(nil)), meta_nonil, c2b0(15), // testStruct2.f2 (id = 4)
+				meta_ref, c2b0(6), // testStruct2.f3 (id = 7)
 			},
 			func(expected, actual any) bool {
 				e := expected.(testStruct2)
@@ -1242,7 +1241,6 @@ func Test_PointerToSingleValue(t *testing.T) {
 
 func Test_PointersToTheSameValue(t *testing.T) {
 	reg, typeId := registry()
-	interfaceTypeId := interfaceId(reg)
 	items := []testItem{
 		// #1
 		{
@@ -1256,10 +1254,10 @@ func Test_PointersToTheSameValue(t *testing.T) {
 				return s
 			}(),
 			[]byte{
-				version, typeId((*testStruct2)(nil)), meta_nonil, // *testStruct2
-				interfaceTypeId, typeId((*byte)(nil)), meta_nonil, 1, // testStruct2.f1 (id = 3)
-				interfaceTypeId, typeId((*byte)(nil)), meta_nonil, 1, // testStruct2.f2 (id = 7)
-				interfaceTypeId, meta_ref, c2b0(4), // testStruct2.f3 is ref to f1 value (id = 11)
+				version, typeId((*testStruct2)(nil)), meta_nonil, meta_cntr, // *testStruct2
+				typeId((*byte)(nil)), meta_nonil, 1, // testStruct2.f1 (id = 2)
+				typeId((*byte)(nil)), meta_nonil, 1, // testStruct2.f2 (id = 6)
+				meta_ref, c2b0(4), // testStruct2.f3 is ref to f1 value (id = 10)
 			},
 			nil,
 		},
@@ -1273,10 +1271,10 @@ func Test_PointersToTheSameValue(t *testing.T) {
 				return s
 			}(),
 			[]byte{
-				version, typeId((*testStruct2)(nil)), meta_nonil, // *testStruct2
-				interfaceTypeId, typeId(nil), meta_nil, // testStruct2.f1 (id = 3)
-				interfaceTypeId, typeId((*byte)(nil)), meta_nonil, 1, // testStruct2.f2 (id = 6)
-				interfaceTypeId, meta_ref, c2b0(7), // testStruct2.f3 is ref to f2 value (id = 10)
+				version, typeId((*testStruct2)(nil)), meta_nonil, meta_cntr, // *testStruct2
+				typeId(nil), meta_nil, // testStruct2.f1 (id = 2)
+				typeId((*byte)(nil)), meta_nonil, 1, // testStruct2.f2 (id = 5)
+				meta_ref, c2b0(7), // testStruct2.f3 is ref to f2 value (id = 9)
 			},
 			nil,
 		},
@@ -1289,10 +1287,10 @@ func Test_PointersToTheSameValue(t *testing.T) {
 				return s
 			}(),
 			[]byte{
-				version, typeId((*testStruct2)(nil)), meta_nonil, // *testStruct2
-				interfaceTypeId, meta_ref, c2b0(0), // testStruct2.f1 (id = 3) is ref to struct
-				interfaceTypeId, meta_ref, c2b0(0), // testStruct2.f2 (id = 6) is ref to struct
-				interfaceTypeId, typeId(nil), meta_nil, // testStruct2.f3
+				version, typeId((*testStruct2)(nil)), meta_nonil, meta_cntr, // *testStruct2
+				meta_ref, c2b0(0), // testStruct2.f1 (id = 2) is ref to struct
+				meta_ref, c2b0(0), // testStruct2.f2 (id = 5) is ref to struct
+				typeId(nil), meta_nil, // testStruct2.f3
 			},
 			nil,
 		},
@@ -1506,7 +1504,6 @@ func Test_CyclicPointerChain(t *testing.T) {
 
 func Test_BackwardPointerToContainer(t *testing.T) {
 	reg, typeId := registry()
-	interfaceTypeId := interfaceId(reg)
 	items := []testItem{
 		// #1
 		{
@@ -1519,10 +1516,10 @@ func Test_BackwardPointerToContainer(t *testing.T) {
 				return s
 			}(),
 			[]byte{
-				version, typeId((*testStruct2)(nil)), meta_nonil, // *testStruct2
-				interfaceTypeId, typeId(false), meta_tru, // f1 (id = 3)
-				interfaceTypeId, typeId((*any)(nil)), meta_nonil, meta_ref, c2b0(2), // f2 is *f1 (id = 6)
-				interfaceTypeId, meta_ref, c2b0(7), // f3 is *f1
+				version, typeId((*testStruct2)(nil)), meta_nonil, meta_cntr, // *testStruct2
+				typeId(false), meta_tru, // f1 (id = 3)
+				typeId((*any)(nil)), meta_nonil, meta_ref, c2b0(2), // f2 is *f1 (id = 6)
+				meta_ref, c2b0(7), // f3 is *f1
 			},
 			func(expected, actual any) bool {
 				if !defaultEq(expected, actual) {
@@ -1545,10 +1542,10 @@ func Test_BackwardPointerToContainer(t *testing.T) {
 				return s
 			}(),
 			[]byte{
-				version, typeId((*testStruct3)(nil)), meta_nonil, // *testStruct3
-				typeId((*bool)(nil)), meta_nonil, meta_tru, // f1 (id = 3)
-				interfaceTypeId, typeId((**bool)(nil)), meta_nonil, meta_ref, c2b0(2), // f2 is *f1 (id = 6)
-				interfaceTypeId, meta_ref, c2b0(7), // f3 is *f1
+				version, typeId((*testStruct3)(nil)), meta_nonil, meta_cntr, // *testStruct3
+				meta_nonil, meta_tru, // f1 (id = 3)
+				typeId((**bool)(nil)), meta_nonil, meta_ref, c2b0(2), // f2 is *f1 (id = 6)
+				meta_ref, c2b0(7), // f3 is *f1
 			},
 			func(expected, actual any) bool {
 				if !defaultEq(expected, actual) {
@@ -1571,10 +1568,10 @@ func Test_BackwardPointerToContainer(t *testing.T) {
 				return s
 			}(),
 			[]byte{
-				version, typeId((*testStruct4)(nil)), meta_nonil, // *testStruct4
-				typeId((*any)(nil)), meta_nonil, typeId(false), meta_tru, // f1 (id = 3)
-				interfaceTypeId, typeId((**any)(nil)), meta_nonil, meta_ref, c2b0(2), // f2 is *f1 (id = 6)
-				interfaceTypeId, meta_ref, c2b0(8), // f3 is *f1
+				version, typeId((*testStruct4)(nil)), meta_nonil, meta_cntr, // *testStruct4
+				meta_nonil, typeId(false), meta_tru, // f1 (id = 3)
+				typeId((**any)(nil)), meta_nonil, meta_ref, c2b0(2), // f2 is *f1 (id = 6)
+				meta_ref, c2b0(8), // f3 is *f1
 			},
 			func(expected, actual any) bool {
 				if !defaultEq(expected, actual) {
@@ -1595,10 +1592,10 @@ func Test_BackwardPointerToContainer(t *testing.T) {
 				return s
 			}(),
 			[]byte{
-				version, typeId((*testStruct2)(nil)), meta_nonil, // *testStruct2
-				interfaceTypeId, meta_ref, c2b0(0), // f1 is ref to s (id = 3)
-				interfaceTypeId, typeId((*any)(nil)), meta_nonil, meta_ref, c2b0(2), // f2 is *f1 (id = 5)
-				interfaceTypeId, meta_ref, c2b0(6), // f3 is ref to f2 value
+				version, typeId((*testStruct2)(nil)), meta_nonil, meta_cntr, // *testStruct2
+				meta_ref, c2b0(0), // f1 is ref to s (id = 3)
+				typeId((*any)(nil)), meta_nonil, meta_ref, c2b0(2), // f2 is *f1 (id = 5)
+				meta_ref, c2b0(6), // f3 is ref to f2 value
 			},
 			func(expected, actual any) bool {
 				if !defaultEq(expected, actual) {
@@ -1617,10 +1614,10 @@ func Test_BackwardPointerToContainer(t *testing.T) {
 				return s
 			}(),
 			[]byte{
-				version, typeId((*testStruct2)(nil)), meta_nonil, // *testStruct2
-				interfaceTypeId, typeId((*any)(nil)), meta_nonil, meta_ref, c2b0(2), // f1 is ref to f1 (id = 3)
-				interfaceTypeId, typeId(nil), meta_nil, // f2
-				interfaceTypeId, typeId(nil), meta_nil, // f3
+				version, typeId((*testStruct2)(nil)), meta_nonil, meta_cntr, // *testStruct2
+				typeId((*any)(nil)), meta_nonil, meta_ref, c2b0(2), // f1 is ref to f1 (id = 3)
+				typeId(nil), meta_nil, // f2
+				typeId(nil), meta_nil, // f3
 			},
 			func(expected, actual any) bool {
 				if !defaultEq(expected, actual) {
@@ -1636,9 +1633,55 @@ func Test_BackwardPointerToContainer(t *testing.T) {
 
 func Test_ForwardPointerToContainer(t *testing.T) {
 	reg, typeId := registry()
-	interfaceTypeId := interfaceId(reg)
 	items := []testItem{
 		// #1
+		{
+			func() any {
+				s := &testStruct2{}
+				x := &s.f3
+				s.f1 = &x
+				return s
+			}(),
+			[]byte{
+				version, typeId((*testStruct2)(nil)), meta_nonil, meta_cntr, // *testStruct2
+				typeId((**any)(nil)), meta_nonil, meta_nonil, meta_ref, c2b0(9), // f1 is ref to f3 (id = 2)
+				typeId(nil), meta_nil, // f2 (id = 7)
+				typeId(nil), meta_nil, // f3 (id = 9)
+			},
+			func(expected, actual any) bool {
+				if !defaultEq(expected, actual) {
+					return false
+				}
+				s := actual.(*testStruct2)
+				s.f3 = byte(123)
+				return **s.f1.(**any) == s.f3 && s.f3 == byte(123)
+			},
+		},
+		// #1
+		{
+			func() any {
+				s := &testStruct2{}
+				x := &s.f3
+				s.f1 = &x
+				s.f2 = &x
+				return s
+			}(),
+			[]byte{
+				version, typeId((*testStruct2)(nil)), meta_nonil, meta_cntr, // *testStruct2
+				typeId((**any)(nil)), meta_nonil, meta_nonil, meta_ref, c2b0(8), // f1 is ref to f3 (id = 2)
+				meta_ref, c2b0(4), // f2 (id = 7)
+				typeId(nil), meta_nil, // f3 (id = 8)
+			},
+			func(expected, actual any) bool {
+				if !defaultEq(expected, actual) {
+					return false
+				}
+				s := actual.(*testStruct2)
+				s.f3 = byte(123)
+				return **s.f1.(**any) == s.f3 && **s.f2.(**any) == s.f3 && s.f3 == byte(123)
+			},
+		},
+		// #3
 		{
 			func() any {
 				s := &testStruct2{}
@@ -1646,10 +1689,10 @@ func Test_ForwardPointerToContainer(t *testing.T) {
 				return s
 			}(),
 			[]byte{
-				version, typeId((*testStruct2)(nil)), meta_nonil, // *testStruct2
-				interfaceTypeId, typeId((*any)(nil)), meta_nonil, meta_ref, c2b0(8), // f1 is ref to f3 (id = 2)
-				interfaceTypeId, typeId(nil), meta_nil, // f2 (id = 5)
-				interfaceTypeId, typeId(nil), meta_nil, // f3 (id = 8)
+				version, typeId((*testStruct2)(nil)), meta_nonil, meta_cntr, // *testStruct2
+				typeId((*any)(nil)), meta_nonil, meta_ref, c2b0(8), // f1 is ref to f3 (id = 2)
+				typeId(nil), meta_nil, // f2 (id = 5)
+				typeId(nil), meta_nil, // f3 (id = 8)
 			},
 			func(expected, actual any) bool {
 				if !defaultEq(expected, actual) {
@@ -1660,8 +1703,71 @@ func Test_ForwardPointerToContainer(t *testing.T) {
 				return *s.f1.(*any) == s.f3 && s.f3 == byte(123)
 			},
 		},
+		// #4
+		{
+			func() any {
+				s := &testStruct2{}
+				s.f1 = &s.f3
+				s.f2 = &s.f3
+				return s
+			}(),
+			[]byte{
+				version, typeId((*testStruct2)(nil)), meta_nonil, meta_cntr, // *testStruct2
+				typeId((*any)(nil)), meta_nonil, meta_ref, c2b0(7), // f1 is ref to f3 (id = 2)
+				meta_ref, c2b0(4), // f2 (id = 5)
+				typeId(nil), meta_nil, // f3 (id = 7)
+			},
+			func(expected, actual any) bool {
+				if !defaultEq(expected, actual) {
+					return false
+				}
+				s := actual.(*testStruct2)
+				//r := reflect.ValueOf(s).Elem()
+				//f1 := r.Field(0)
+				//f1 = reflex.PtrAt(f1.Type(), f1).Elem()
+				//f2 := r.Field(1)
+				//f3 := r.Field(2)
+				//pf3 := reflex.PtrAt(f3.Type(), f3)
+				//f3 = pf3.Elem()
+				//fmt.Println(f1.Elem().UnsafePointer())
+				//fmt.Println(f2.Elem().UnsafePointer())
+
+				//field, _ := reflect.TypeOf(reflect.Value{}).FieldByName("flag")
+				//flag := (*uintptr)(unsafe.Add(unsafe.Pointer(&f3), field.Offset))
+				//*flag &= ^uintptr(reflex.FlagIndir)
+				//setFlag(f1.Elem(), reflex.FlagAddr).Set(pf3)
+				//f1.Set(pf3)
+				//f1.Elem()
+				/*rv := reflect.ValueOf(f1.Elem())
+				rf1 := rv.Field(1)
+				rf1 = reflex.PtrAt(rf1.Type(), rf1).Elem()
+				rf1.Set(reflect.ValueOf(reflex.PtrOf(f3)))*/
+				//fmt.Println(reflex.DirPtrOf(f1.Elem()))
+				//fmt.Println(reflex.PtrOf(f1.Elem()))
+				//fmt.Println(reflex.DirPtrOf(f1))
+				//fmt.Println(reflex.PtrOf(f1))
+				//fmt.Println(reflex.PtrOf(f3))
+
+				s.f3 = byte(123)
+				return *s.f1.(*any) == s.f3 && *s.f2.(*any) == s.f3 && s.f3 == byte(123)
+			},
+		},
 	}
 	runTests(items, reg, t)
+}
+
+func setFlag(v reflect.Value, flag uintptr) reflect.Value {
+	field, _ := reflect.TypeOf(reflect.Value{}).FieldByName("flag")
+	ff := (*uintptr)(unsafe.Add(unsafe.Pointer(&v), field.Offset))
+	*ff |= uintptr(flag)
+	return v
+}
+
+func resetFlag(v reflect.Value, flag uintptr) reflect.Value {
+	field, _ := reflect.TypeOf(reflect.Value{}).FieldByName("flag")
+	ff := (*uintptr)(unsafe.Add(unsafe.Pointer(&v), field.Offset))
+	*ff ^= uintptr(flag)
+	return v
 }
 
 /*func TestPtr(t *testing.T) {

@@ -11,30 +11,30 @@ import (
 	"github.com/URALINNOVATSIYA/reflex"
 )
 
+type forwardPtr struct {
+	ptrId       int
+	elemValueId int
+	elemType    reflect.Type
+}
+
 type Unserializer struct {
-	typeRegistry     *TypeRegistry
-	structCodingMode byte
-	id               int
-	pos              int
-	size             int
-	data             []byte
-	values           map[int]reflect.Value
-	containers       map[int]struct{}
+	typeRegistry *TypeRegistry
+	id           int
+	pos          int
+	size         int
+	data         []byte
+	values       map[int]reflect.Value
+	forwardPtrs  []forwardPtr
 }
 
 func NewUnserializer() *Unserializer {
 	return &Unserializer{
-		typeRegistry:     GetDefaultTypeRegistry(),
-		structCodingMode: GetDefaultStructCodingMode(),
+		typeRegistry: GetDefaultTypeRegistry(),
 	}
 }
 
 func (u *Unserializer) WithOptions(options []any) *Unserializer {
 	for _, option := range options {
-		if v, ok := option.(byte); ok {
-			u.WithStructCodingMode(v)
-			continue
-		}
 		if v, ok := option.(*TypeRegistry); ok {
 			u.WithTypeRegistry(v)
 			continue
@@ -46,11 +46,6 @@ func (u *Unserializer) WithOptions(options []any) *Unserializer {
 
 func (u *Unserializer) WithTypeRegistry(registry *TypeRegistry) *Unserializer {
 	u.typeRegistry = registry
-	return u
-}
-
-func (u *Unserializer) WithStructCodingMode(mode byte) *Unserializer {
-	u.structCodingMode = mode
 	return u
 }
 
@@ -68,7 +63,7 @@ func (u *Unserializer) Decode(data []byte) (value any, err error) {
 	u.data = data
 	u.size = len(data)
 	u.values = make(map[int]reflect.Value)
-	u.containers = make(map[int]struct{})
+	u.forwardPtrs = nil
 	if v := u.decode(); v.IsValid() {
 		return v.Interface(), nil
 	}
@@ -76,7 +71,8 @@ func (u *Unserializer) Decode(data []byte) (value any, err error) {
 }
 
 func (u *Unserializer) decode() reflect.Value {
-	v := u.decodeNode()
+	v := u.decodeNode(-1)
+	u.restoreForwarPointers()
 	return v
 }
 
@@ -92,16 +88,22 @@ func (u *Unserializer) decodeType() reflect.Type {
 	return u.typeRegistry.typeById(int(u.decodeCount(3)))
 }
 
-func (u *Unserializer) decodeNode() reflect.Value {
+func (u *Unserializer) decodeNode(parentContainerId int) reflect.Value {
 	if u.top() == meta_ref {
-		return u.decodeReference()
+		return u.decodeReference(nil, parentContainerId)
 	}
 	t := u.decodeType()
-	v := reflex.Zero(t)
-	return u.decodeValue(t, v)
+	return u.decodeValue(t, reflex.Zero(t), parentContainerId)
 }
 
-func (u *Unserializer) decodeValue(t reflect.Type, v reflect.Value) reflect.Value {
+func (u *Unserializer) decodeContainer(containerType reflect.Type, containerValue reflect.Value) {
+	containerValue = reflex.PtrAt(containerType, containerValue).Elem()
+	u.values[u.id] = containerValue
+	u.id++
+	containerValue.Set(u.decodeValue(containerType, reflex.Zero(containerType), u.id-1))
+}
+
+func (u *Unserializer) decodeValue(t reflect.Type, v reflect.Value, parentContainerId int) reflect.Value {
 	kind := v.Kind()
 	switch kind {
 	case reflect.Invalid:
@@ -142,7 +144,7 @@ func (u *Unserializer) decodeValue(t reflect.Type, v reflect.Value) reflect.Valu
 		u.decodeUnsafePointer(v)
 	default:
 		if u.top() == meta_ref {
-			return u.decodeReference()
+			return u.decodeReference(t, parentContainerId)
 		}
 		u.values[u.id] = v
 		u.id++
@@ -153,16 +155,18 @@ func (u *Unserializer) decodeValue(t reflect.Type, v reflect.Value) reflect.Valu
 			u.decodeChan(v)
 		case reflect.Func:
 			u.decodeFunc(v)
-		case reflect.Slice, reflect.Array:
+		case reflect.Array:
+			//u.decodeArray(t.Elem(), v)
+		case reflect.Slice:
 			//u.decodeList(t.Elem(), v)
 		case reflect.Map:
 			//u.decodeMap(t.Key(), t.Elem(), v)
 		case reflect.Struct:
 			u.decodeStruct(v)
 		case reflect.Interface:
-			u.decodeInterface(v)
+			u.decodeInterface(v, parentContainerId)
 		case reflect.Pointer:
-			u.decodePointer(t.Elem(), v)
+			u.decodePointer(t.Elem(), v, parentContainerId)
 		}
 		return v
 	}
@@ -359,55 +363,53 @@ func (u *Unserializer) decodeMap(keyType reflect.Type, valueType reflect.Type, v
 }
 
 func (u *Unserializer) decodeStruct(v reflect.Value) {
-	switch u.structCodingMode {
-	case StructCodingModeIndex:
-	case StructCodingModeName:
-	default:
-		u.decodeStructDefaultMode(v)
+	_ = u.readByte() // skip container mark
+	for i, count := 0, v.NumField(); i < count; i++ {
+		field := v.Field(i)
+		u.decodeContainer(field.Type(), field)
 	}
 }
 
-func (u *Unserializer) decodeStructDefaultMode(v reflect.Value) {
-	fieldCount := v.NumField()
-	for i := 0; i < fieldCount; i++ {
-		fieldValue := v.Field(i)
-		fieldType := fieldValue.Type()
-		fieldValue = reflex.PtrAt(fieldType, fieldValue).Elem()
-		u.values[u.id] = fieldValue
-		u.id++
-		fieldValue.Set(u.decodeNode())
-	}
-}
-
-func (u *Unserializer) decodeInterface(v reflect.Value) {
-	elem := u.decodeNode()
+func (u *Unserializer) decodeInterface(v reflect.Value, parentContainerId int) {
+	elem := u.decodeNode(parentContainerId)
 	if elem.IsValid() {
 		v.Set(elem)
 	}
 }
 
-func (u *Unserializer) decodePointer(elemType reflect.Type, v reflect.Value) {
+func (u *Unserializer) decodePointer(elemType reflect.Type, v reflect.Value, parentContainerId int) {
 	if u.readByte() == meta_nil {
 		return
 	}
 	elemValue := reflex.Zero(elemType)
 	v.Set(reflex.PtrAt(elemType, elemValue))
-	elemValue = u.decodeValue(elemType, elemValue)
-	if elemValue.Kind() == reflect.Pointer && elemType.Kind() == reflect.Interface {
-		v.Elem().Set(elemValue)
-	} else {
-		v.Set(reflex.PtrAt(elemType, elemValue))
+	elemValue = u.decodeValue(elemType, elemValue, parentContainerId)
+	if !elemValue.IsValid() {
+		return
 	}
+	u.setPtrValue(v, elemType, elemValue)
 }
 
-func (u *Unserializer) decodeReference() reflect.Value {
+func (u *Unserializer) decodeReference(elemType reflect.Type, parentContainerId int) reflect.Value {
 	_ = u.readByte() // skip reference indicator
 	id := u.decodeId()
 	if v, exists := u.values[id]; exists {
 		u.id++
 		return v
 	}
-	panic(fmt.Errorf("reference on node #%d is incorrect", id))
+	if elemType == nil {
+		panic(fmt.Errorf("reference on node #%d is incorrect", id))
+	}
+	ptrId := u.id - 1
+	if ptrId == parentContainerId+1 || ptrId == parentContainerId+2 {
+		ptrId = parentContainerId
+	}
+	u.forwardPtrs = append(u.forwardPtrs, forwardPtr{
+		ptrId:       ptrId,
+		elemValueId: id,
+		elemType:    elemType,
+	})
+	return reflect.Value{}
 }
 
 func (u *Unserializer) decodeCount(sizeBits int) uint64 {
@@ -417,6 +419,25 @@ func (u *Unserializer) decodeCount(sizeBits int) uint64 {
 	}
 	u.pos += length
 	return cnt
+}
+
+func (u *Unserializer) restoreForwarPointers() {
+	for _, forwardPtr := range u.forwardPtrs {
+		ptr := u.values[forwardPtr.ptrId]
+		elemValue, exists := u.values[forwardPtr.elemValueId]
+		if !exists {
+			panic(fmt.Errorf("value #%d is not found", forwardPtr.elemValueId))
+		}
+		u.setPtrValue(ptr, forwardPtr.elemType, elemValue)
+	}
+}
+
+func (u *Unserializer) setPtrValue(ptr reflect.Value, elemType reflect.Type, elemValue reflect.Value) {
+	if elemValue.Kind() == reflect.Pointer && elemType.Kind() == reflect.Interface {
+		ptr.Elem().Set(elemValue)
+	} else {
+		ptr.Set(reflex.PtrAt(elemType, elemValue))
+	}
 }
 
 func (u *Unserializer) top() byte {

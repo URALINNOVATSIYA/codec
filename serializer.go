@@ -15,30 +15,25 @@ const (
 	meta_fls   byte = 0b0000_0001 // boolean false
 	meta_tru   byte = 0b0000_0011 // boolean true
 	meta_nil   byte = 0b0001_0000 // determines whether underlying value is nil
+	meta_cntr  byte = 0b0001_0000 // mark of structs or arrays
 	meta_nonil byte = 0b0010_0000 // determines whether underlying value is not nil
 	meta_fixed byte = 0b0100_0000 // for lists that are arrays (i.e. have fixed size)
 )
 
 type Serializer struct {
-	typeRegistry     *TypeRegistry
-	structCodingMode byte
-	nodeId           int
-	values           *graph
+	typeRegistry *TypeRegistry
+	values       *graph
+	nodeId       int
 }
 
 func NewSerializer() *Serializer {
 	return &Serializer{
-		typeRegistry:     GetDefaultTypeRegistry(),
-		structCodingMode: GetDefaultStructCodingMode(),
+		typeRegistry: GetDefaultTypeRegistry(),
 	}
 }
 
 func (s *Serializer) WithOptions(options []any) *Serializer {
 	for _, option := range options {
-		if v, ok := option.(byte); ok {
-			s.WithStructCodingMode(v)
-			continue
-		}
 		if v, ok := option.(*TypeRegistry); ok {
 			s.WithTypeRegistry(v)
 			continue
@@ -50,11 +45,6 @@ func (s *Serializer) WithOptions(options []any) *Serializer {
 
 func (s *Serializer) WithTypeRegistry(registry *TypeRegistry) *Serializer {
 	s.typeRegistry = registry
-	return s
-}
-
-func (s *Serializer) WithStructCodingMode(mode byte) *Serializer {
-	s.structCodingMode = mode
 	return s
 }
 
@@ -220,6 +210,15 @@ func (s *Serializer) encodeNode(nodeId int) []byte {
 	return s.encodeReference(nodeId)
 }
 
+func (s *Serializer) encodeContainer(containerId int) []byte {
+	nodeId := s.values.children(containerId)[0]
+	v := s.values.get(nodeId)
+	if b := s.encodeValue(v, nodeId); b != nil {
+		return b
+	}
+	return s.encodeReference(nodeId)
+}
+
 func (s *Serializer) encodeType(v reflect.Value) []byte {
 	return u2bs(uint64(s.typeRegistry.typeIdByValue(v)), 3)
 }
@@ -277,7 +276,7 @@ func (s *Serializer) encodeValue(v reflect.Value, nodeId int) []byte {
 	case reflect.Map:
 		//bytes = s.encodeMap(v)
 	case reflect.Struct:
-		return s.encodeStruct(v, nodeId)
+		return s.encodeStruct(nodeId)
 	case reflect.Interface:
 		return s.encodeInterface(nodeId)
 	case reflect.Pointer:
@@ -449,50 +448,12 @@ func (s *Serializer) encodeMap(v reflect.Value) []byte {
 	return nil
 }
 
-func (s *Serializer) encodeStruct(v reflect.Value, id int) []byte {
-	switch s.structCodingMode {
-	case StructCodingModeIndex:
-		return s.encodeStructIndexMode(v)
-	case StructCodingModeName:
-		return s.encodeStructNameMode(v)
-	default:
-		return s.encodeStructDefaultMode(id)
-	}
-}
-
-func (s *Serializer) encodeStructIndexMode(v reflect.Value) []byte {
-	/*var fields []byte
-	fieldCount := v.NumField()
-	for i := 0; i < fieldCount; i++ {
-		fields = append(fields, s.encodeCount(i)...)
-		field, _ := s.encode(v.Field(i))
-		fields = append(fields, field...)
-	}
-	return append(s.encodeCount(fieldCount), fields...)*/
-	return nil
-}
-
-func (s *Serializer) encodeStructNameMode(v reflect.Value) []byte {
-	/*var fields []byte
-	fieldCount := v.NumField()
-	for i, t := 0, v.Type(); i < fieldCount; i++ {
-		fieldName := t.Field(i).Name
-		fields = append(fields, s.encodeString(reflect.ValueOf(fieldName))...)
-		if fieldName == "_" {
-			fields = append(fields, s.encodeCount(i)...)
-		}
-		field, _ := s.encode(v.Field(i))
-		fields = append(fields, field...)
-	}
-	return append(s.encodeCount(fieldCount), fields...)*/
-	return nil
-}
-
-func (s *Serializer) encodeStructDefaultMode(nodeId int) []byte {
-	var b []byte
+func (s *Serializer) encodeStruct(nodeId int) []byte {
+	b := []byte{meta_cntr}
 	for _, fieldId := range s.values.children(nodeId) {
 		s.values.visit(fieldId)
-		b = append(b, s.encodeNode(s.values.children(fieldId)[0])...)
+		//b = append(b, s.encodeNode(s.values.children(fieldId)[0])...)
+		b = append(b, s.encodeContainer(fieldId)...)
 	}
 	return b
 }
