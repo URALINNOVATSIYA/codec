@@ -12,9 +12,9 @@ import (
 )
 
 type forwardPtr struct {
-	ptrId       int
-	elemValueId int
-	elemType    reflect.Type
+	cntrId   int
+	elemId   int
+	elemType reflect.Type
 }
 
 type Unserializer struct {
@@ -24,7 +24,7 @@ type Unserializer struct {
 	size         int
 	data         []byte
 	values       map[int]reflect.Value
-	forwardPtrs  []forwardPtr
+	forwardPtrs  map[int]forwardPtr
 }
 
 func NewUnserializer() *Unserializer {
@@ -63,7 +63,7 @@ func (u *Unserializer) Decode(data []byte) (value any, err error) {
 	u.data = data
 	u.size = len(data)
 	u.values = make(map[int]reflect.Value)
-	u.forwardPtrs = nil
+	u.forwardPtrs = make(map[int]forwardPtr)
 	if v := u.decode(); v.IsValid() {
 		return v.Interface(), nil
 	}
@@ -100,7 +100,10 @@ func (u *Unserializer) decodeContainer(containerType reflect.Type, containerValu
 	containerValue = reflex.PtrAt(containerType, containerValue).Elem()
 	u.values[u.id] = containerValue
 	u.id++
-	containerValue.Set(u.decodeValue(containerType, reflex.Zero(containerType), u.id-1))
+	v := u.decodeValue(containerType, reflex.Zero(containerType), u.id-1)
+	if v.IsValid() {
+		containerValue.Set(v)
+	}
 }
 
 func (u *Unserializer) decodeValue(t reflect.Type, v reflect.Value, parentContainerId int) reflect.Value {
@@ -395,20 +398,27 @@ func (u *Unserializer) decodeReference(elemType reflect.Type, parentContainerId 
 	id := u.decodeId()
 	if v, exists := u.values[id]; exists {
 		u.id++
+		if ptr, exists := u.forwardPtrs[id]; exists {
+			return u.registerForwardPtr(u.id-2, parentContainerId, ptr.elemId, ptr.elemType)
+		}
 		return v
 	}
 	if elemType == nil {
 		panic(fmt.Errorf("reference on node #%d is incorrect", id))
 	}
-	ptrId := u.id - 1
+	return u.registerForwardPtr(u.id-1, parentContainerId, id, elemType)
+}
+
+func (u *Unserializer) registerForwardPtr(ptrId, parentContainerId, elemId int, elemType reflect.Type) reflect.Value {
+	cntrId := ptrId
 	if ptrId == parentContainerId+1 || ptrId == parentContainerId+2 {
-		ptrId = parentContainerId
+		cntrId = parentContainerId
 	}
-	u.forwardPtrs = append(u.forwardPtrs, forwardPtr{
-		ptrId:       ptrId,
-		elemValueId: id,
-		elemType:    elemType,
-	})
+	u.forwardPtrs[ptrId] = forwardPtr{
+		cntrId:   cntrId,
+		elemId:   elemId,
+		elemType: elemType,
+	}
 	return reflect.Value{}
 }
 
@@ -423,10 +433,10 @@ func (u *Unserializer) decodeCount(sizeBits int) uint64 {
 
 func (u *Unserializer) restoreForwarPointers() {
 	for _, forwardPtr := range u.forwardPtrs {
-		ptr := u.values[forwardPtr.ptrId]
-		elemValue, exists := u.values[forwardPtr.elemValueId]
+		ptr := u.values[forwardPtr.cntrId]
+		elemValue, exists := u.values[forwardPtr.elemId]
 		if !exists {
-			panic(fmt.Errorf("value #%d is not found", forwardPtr.elemValueId))
+			panic(fmt.Errorf("value #%d is not found", forwardPtr.elemId))
 		}
 		u.setPtrValue(ptr, forwardPtr.elemType, elemValue)
 	}

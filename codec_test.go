@@ -1657,7 +1657,7 @@ func Test_ForwardPointerToContainer(t *testing.T) {
 				return **s.f1.(**any) == s.f3 && s.f3 == byte(123)
 			},
 		},
-		// #1
+		// #2
 		{
 			func() any {
 				s := &testStruct2{}
@@ -1669,7 +1669,7 @@ func Test_ForwardPointerToContainer(t *testing.T) {
 			[]byte{
 				version, typeId((*testStruct2)(nil)), meta_nonil, meta_cntr, // *testStruct2
 				typeId((**any)(nil)), meta_nonil, meta_nonil, meta_ref, c2b0(8), // f1 is ref to f3 (id = 2)
-				meta_ref, c2b0(4), // f2 (id = 7)
+				meta_ref, c2b0(4), // f2 (id = 6)
 				typeId(nil), meta_nil, // f3 (id = 8)
 			},
 			func(expected, actual any) bool {
@@ -1682,6 +1682,31 @@ func Test_ForwardPointerToContainer(t *testing.T) {
 			},
 		},
 		// #3
+		{
+			func() any {
+				s := &testStruct2{}
+				x := &s.f2
+				s.f1 = &x
+				s.f3 = &x
+				return s
+			}(),
+			[]byte{
+				version, typeId((*testStruct2)(nil)), meta_nonil, meta_cntr, // *testStruct2
+				typeId((**any)(nil)), meta_nonil, meta_nonil, meta_ref, c2b0(6), // f1 is ref to f2 (id = 2)
+				typeId(nil), meta_nil, // f2 (id = 6)
+				meta_ref, c2b0(4), // f3 (id = 8)
+
+			},
+			func(expected, actual any) bool {
+				if !defaultEq(expected, actual) {
+					return false
+				}
+				s := actual.(*testStruct2)
+				s.f2 = byte(123)
+				return **s.f1.(**any) == s.f2 && **s.f3.(**any) == s.f2 && s.f2 == byte(123)
+			},
+		},
+		// #4
 		{
 			func() any {
 				s := &testStruct2{}
@@ -1703,7 +1728,7 @@ func Test_ForwardPointerToContainer(t *testing.T) {
 				return *s.f1.(*any) == s.f3 && s.f3 == byte(123)
 			},
 		},
-		// #4
+		// #5
 		{
 			func() any {
 				s := &testStruct2{}
@@ -1722,52 +1747,36 @@ func Test_ForwardPointerToContainer(t *testing.T) {
 					return false
 				}
 				s := actual.(*testStruct2)
-				//r := reflect.ValueOf(s).Elem()
-				//f1 := r.Field(0)
-				//f1 = reflex.PtrAt(f1.Type(), f1).Elem()
-				//f2 := r.Field(1)
-				//f3 := r.Field(2)
-				//pf3 := reflex.PtrAt(f3.Type(), f3)
-				//f3 = pf3.Elem()
-				//fmt.Println(f1.Elem().UnsafePointer())
-				//fmt.Println(f2.Elem().UnsafePointer())
-
-				//field, _ := reflect.TypeOf(reflect.Value{}).FieldByName("flag")
-				//flag := (*uintptr)(unsafe.Add(unsafe.Pointer(&f3), field.Offset))
-				//*flag &= ^uintptr(reflex.FlagIndir)
-				//setFlag(f1.Elem(), reflex.FlagAddr).Set(pf3)
-				//f1.Set(pf3)
-				//f1.Elem()
-				/*rv := reflect.ValueOf(f1.Elem())
-				rf1 := rv.Field(1)
-				rf1 = reflex.PtrAt(rf1.Type(), rf1).Elem()
-				rf1.Set(reflect.ValueOf(reflex.PtrOf(f3)))*/
-				//fmt.Println(reflex.DirPtrOf(f1.Elem()))
-				//fmt.Println(reflex.PtrOf(f1.Elem()))
-				//fmt.Println(reflex.DirPtrOf(f1))
-				//fmt.Println(reflex.PtrOf(f1))
-				//fmt.Println(reflex.PtrOf(f3))
-
 				s.f3 = byte(123)
 				return *s.f1.(*any) == s.f3 && *s.f2.(*any) == s.f3 && s.f3 == byte(123)
 			},
 		},
+		// #6
+		{
+			func() any {
+				s := &testStruct2{}
+				s.f1 = &s.f2
+				s.f3 = &s.f2
+				return s
+			}(),
+			[]byte{
+				version, typeId((*testStruct2)(nil)), meta_nonil, meta_cntr, // *testStruct2
+				typeId((*any)(nil)), meta_nonil, meta_ref, c2b0(5), // f1 is ref to f2 (id = 2)
+				typeId(nil), meta_nil, // f2 (id = 5)
+				meta_ref, c2b0(4), // f3 (id = 7)
+
+			},
+			func(expected, actual any) bool {
+				if !defaultEq(expected, actual) {
+					return false
+				}
+				s := actual.(*testStruct2)
+				s.f2 = byte(123)
+				return *s.f1.(*any) == s.f2 && *s.f3.(*any) == s.f2 && s.f2 == byte(123)
+			},
+		},
 	}
 	runTests(items, reg, t)
-}
-
-func setFlag(v reflect.Value, flag uintptr) reflect.Value {
-	field, _ := reflect.TypeOf(reflect.Value{}).FieldByName("flag")
-	ff := (*uintptr)(unsafe.Add(unsafe.Pointer(&v), field.Offset))
-	*ff |= uintptr(flag)
-	return v
-}
-
-func resetFlag(v reflect.Value, flag uintptr) reflect.Value {
-	field, _ := reflect.TypeOf(reflect.Value{}).FieldByName("flag")
-	ff := (*uintptr)(unsafe.Add(unsafe.Pointer(&v), field.Offset))
-	*ff ^= uintptr(flag)
-	return v
 }
 
 /*func TestPtr(t *testing.T) {

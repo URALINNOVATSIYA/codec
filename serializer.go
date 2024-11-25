@@ -15,9 +15,8 @@ const (
 	meta_fls   byte = 0b0000_0001 // boolean false
 	meta_tru   byte = 0b0000_0011 // boolean true
 	meta_nil   byte = 0b0001_0000 // determines whether underlying value is nil
-	meta_cntr  byte = 0b0001_0000 // mark of structs or arrays
 	meta_nonil byte = 0b0010_0000 // determines whether underlying value is not nil
-	meta_fixed byte = 0b0100_0000 // for lists that are arrays (i.e. have fixed size)
+	meta_cntr  byte = 0b0100_0000 // mark of structs or arrays
 )
 
 type Serializer struct {
@@ -204,30 +203,32 @@ func (s *Serializer) encodeNodes() []byte {
 
 func (s *Serializer) encodeNode(nodeId int) []byte {
 	v := s.values.get(nodeId)
-	if b := s.encodeValue(v, nodeId); b != nil {
-		return append(s.encodeType(v), b...)
+	if s.values.isVisited(nodeId) {
+		return s.encodeReference(nodeId)
 	}
-	return s.encodeReference(nodeId)
+	s.values.visit(nodeId)
+	return append(s.encodeType(v), s.encodeValue(v, nodeId)...)
 }
 
 func (s *Serializer) encodeContainer(containerId int) []byte {
 	nodeId := s.values.children(containerId)[0]
 	v := s.values.get(nodeId)
-	if b := s.encodeValue(v, nodeId); b != nil {
-		return b
-	}
-	return s.encodeReference(nodeId)
+	return s.visitValue(v, nodeId)
 }
 
 func (s *Serializer) encodeType(v reflect.Value) []byte {
 	return u2bs(uint64(s.typeRegistry.typeIdByValue(v)), 3)
 }
 
-func (s *Serializer) encodeValue(v reflect.Value, nodeId int) []byte {
+func (s *Serializer) visitValue(v reflect.Value, nodeId int) []byte {
 	if s.values.isVisited(nodeId) {
-		return nil
+		return s.encodeReference(nodeId)
 	}
 	s.values.visit(nodeId)
+	return s.encodeValue(v, nodeId)
+}
+
+func (s *Serializer) encodeValue(v reflect.Value, nodeId int) []byte {
 	switch v.Kind() {
 	case reflect.Invalid:
 		return s.encodeNil()
@@ -271,10 +272,12 @@ func (s *Serializer) encodeValue(v reflect.Value, nodeId int) []byte {
 		return s.encodeChan(v)
 	case reflect.Func:
 		return s.encodeFunc(v)
-	case reflect.Slice, reflect.Array:
-		//bytes = s.encodeList(v)
+	case reflect.Array:
+		return s.encodeArray(nodeId)
+	case reflect.Slice:
+		return s.encodeSlice(nodeId)
 	case reflect.Map:
-		//bytes = s.encodeMap(v)
+		return s.encodeMap(nodeId)
 	case reflect.Struct:
 		return s.encodeStruct(nodeId)
 	case reflect.Interface:
@@ -384,36 +387,20 @@ func (s *Serializer) encodeFunc(v reflect.Value) []byte {
 	return []byte{meta_nonil}
 }
 
-func (s *Serializer) encodeList(v reflect.Value) []byte {
-	/*var b []byte
-	if v.Kind() == reflect.Slice {
-		if v.IsNil() {
-			return []byte{meta_nil}
-		}
-		b = []byte{0}
-	} else {
-		b = []byte{meta_fixed}
+func (s *Serializer) encodeArray(nodeId int) []byte {
+	b := []byte{meta_cntr}
+	for _, cntrId := range s.values.children(nodeId) {
+		s.values.visit(cntrId)
+		b = append(b, s.encodeContainer(cntrId)...)
 	}
-	length := v.Len()
-	values := []byte{}
-	refs := []byte{}
-	for i := 0; i < length; i++ {
-		value, isRefVal := s.encodeValue(v.Index(i))
-		if isRefVal {
-			value = value[1:]
-			refs = append(refs, s.encodeCount(i)...)
-		}
-		values = append(values, value...)
-	}
-	b = append(b, s.encodeCount(length)...)
-	b = append(b, s.encodeCount(len(refs))...)
-	b = append(b, refs...)
-	b = append(b, values...)
-	return b*/
+	return b
+}
+
+func (s *Serializer) encodeSlice(nodeId int) []byte {
 	return nil
 }
 
-func (s *Serializer) encodeMap(v reflect.Value) []byte {
+func (s *Serializer) encodeMap(nodeId int) []byte {
 	/*if v.IsNil() {
 		return []byte{meta_nil}
 	}
@@ -452,7 +439,6 @@ func (s *Serializer) encodeStruct(nodeId int) []byte {
 	b := []byte{meta_cntr}
 	for _, fieldId := range s.values.children(nodeId) {
 		s.values.visit(fieldId)
-		//b = append(b, s.encodeNode(s.values.children(fieldId)[0])...)
 		b = append(b, s.encodeContainer(fieldId)...)
 	}
 	return b
@@ -468,10 +454,7 @@ func (s *Serializer) encodePointer(nodeId int) []byte {
 		return []byte{meta_nil}
 	}
 	childId := childs[0]
-	b := s.encodeValue(s.values.get(childId), childId)
-	if b == nil {
-		b = s.encodeReference(childId)
-	}
+	b := s.visitValue(s.values.get(childId), childId)
 	return append([]byte{meta_nonil}, b...)
 }
 
