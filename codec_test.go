@@ -1102,22 +1102,61 @@ func Test_Func(t *testing.T) {
 func Test_StructWithoutTags(t *testing.T) {
 	reg, typeId := registry()
 	items := []testItem{
+		// #1
 		{
 			testStruct1{
 				123,
 				true,
 				"abc",
-				"abcd",
+				0,
 				"abc",
 			},
 			[]byte{
 				version,
 				typeId(testStruct1{}), meta_cntr, // testStruct1 header
-				0b0010_0000, 246, // testStruct1.f1 (id = 1)
+				0b0010_0000, 246,       // testStruct1.f1 (id = 1)
 				meta_tru,               // testStruct1.f2 (id = 3)
 				c2b0(3), 'a', 'b', 'c', // testStruct1.F3 (id = 5)
-				c2b0(4), 'a', 'b', 'c', 'd', // testStruct1.F4 (id = 7)
-				meta_ref, c2b0(6), // ref to testStruct1.F3 (id = 9)
+				0,                      // testStruct1.F4 (id = 7)
+				meta_ref, c2b0(6),      // ref to testStruct1.F3 (id = 9)
+			},
+			nil,
+		},
+		// #2
+		{
+			testStruct2{
+				testStruct1{
+					111,
+					true,
+					"abcde",
+					0,
+					"",
+				},
+				nil,
+				testStruct1{
+					0,
+					false,
+					"",
+					128,
+					"abcde",
+				},
+			},
+			[]byte{
+				version,
+				typeId(testStruct2{}), meta_cntr, // testStruct2 header
+				typeId(testStruct1{}), meta_cntr, // testStruct2.f1 (id = 2)
+			    0b0010_0000, 222,                 // testStruct2.f1.f1 (id = 4)
+				meta_tru,                         // testStruct2.f1.f2 (id = 6)
+				c2b0(5), 'a', 'b', 'c', 'd', 'e', // testStruct2.f1.F3 (id = 8)
+				0,                                // testStruct2.f1.F4 (id = 10)
+				c2b0(0),                          // testStruct2.f1.f5 (id = 12)
+				typeId(nil), meta_nil,            // testStruct2.f2
+				typeId(testStruct1{}), meta_cntr, // testStruct2.f3
+				0b0001_0000,                      // testStruct2.f3.f1
+				meta_fls,                         // testStruct2.f3.f2
+				meta_ref, c2b0(13),               // testStruct2.f3.F3
+				128,                              // testStruct2.f3.F4
+				meta_ref, c2b0(9),                // testStruct2.f3.f5
 			},
 			nil,
 		},
@@ -1139,9 +1178,9 @@ func Test_ReferenceToTheSameValue(t *testing.T) {
 			[]byte{
 				version,
 				typeId(testStruct2{}), meta_cntr, // testStruct2 header
-				typeId(registry), meta_nonil, // testStruct1.f1 (id = 1)
-				meta_ref, c2b0(3), // testStruct2.f2 (id = 4)
-				typeId(nil), meta_nil, // testStruct2.f3 (id = 7)
+				typeId(registry), meta_nonil,     // testStruct1.f1 (id = 1)
+				meta_ref, c2b0(3),                // testStruct2.f2 (id = 4)
+				typeId(nil), meta_nil,            // testStruct2.f3 (id = 7)
 			},
 			func(expected, actual any) bool {
 				e := expected.(testStruct2)

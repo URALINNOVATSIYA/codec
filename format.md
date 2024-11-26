@@ -87,8 +87,14 @@ value_type_id encoded_value
 
 Сериализованное значение состоит из закодированного значения на которое указывает указатель:
 
+nil
 ```
-encoded_pointed_value
+&H10
+```
+
+не nil
+```
+&H20 encoded_pointed_value
 ```
 
 ### struct

@@ -156,11 +156,11 @@ func (s *Serializer) traverseList(v reflect.Value, id int) {
 }
 
 func (s *Serializer) traverseMap(v reflect.Value, id int) {
-	/*iter := v.MapRange()
+	iter := v.MapRange()
 	for iter.Next() {
 		s.traverse(id, iter.Key())
 		s.traverse(id, iter.Value())
-	}*/
+	}
 }
 
 func (s *Serializer) traverseStruct(v reflect.Value, nodeId int) {
@@ -277,7 +277,7 @@ func (s *Serializer) encodeValue(v reflect.Value, nodeId int) []byte {
 	case reflect.Slice:
 		return s.encodeSlice(nodeId)
 	case reflect.Map:
-		return s.encodeMap(nodeId)
+		return s.encodeMap(v, nodeId)
 	case reflect.Struct:
 		return s.encodeStruct(nodeId)
 	case reflect.Interface:
@@ -400,39 +400,15 @@ func (s *Serializer) encodeSlice(nodeId int) []byte {
 	return nil
 }
 
-func (s *Serializer) encodeMap(nodeId int) []byte {
-	/*if v.IsNil() {
+func (s *Serializer) encodeMap(v reflect.Value, nodeId int) []byte {
+	if v.IsNil() {
 		return []byte{meta_nil}
 	}
-	values := []byte{}
-	refs := []byte{}
-	iter := v.MapRange()
-	i := 0
-	for iter.Next() {
-		key, keyRefVal := s.encodeValue(iter.Key())
-		value, valueRefVal := s.encodeValue(iter.Value())
-		f := byte(0)
-		if valueRefVal {
-			f |= 0b01
-			value = value[1:]
-		}
-		if keyRefVal {
-			f |= 0b10
-			key = key[1:]
-		}
-		if f != 0 {
-			refs = append(refs, f)
-			refs = append(refs, s.encodeCount(i)...)
-		}
-		values = append(values, key...)
-		values = append(values, value...)
-		i++
+	b := append([]byte{meta_nonil}, c2b(v.Len())...)
+	for _, id := range s.values.children(nodeId) {
+		b = append(b, s.encodeValue(s.values.get(id), id)...)
 	}
-	b := append([]byte{0}, s.encodeCount(v.Len())...)
-	b = append(b, s.encodeCount(len(refs))...)
-	b = append(b, refs...)
-	b = append(b, values...)*/
-	return nil
+	return b
 }
 
 func (s *Serializer) encodeStruct(nodeId int) []byte {

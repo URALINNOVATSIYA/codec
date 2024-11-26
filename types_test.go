@@ -36,11 +36,11 @@ type (
 	testBoolPtr       *bool
 	testRecPtr        *testRecPtr
 	testStruct1       struct {
-		f1 int
-		f2 bool
-		F3 string
-		F4 string
-		f5 string
+		f1 int    `codec:"index=2"`
+		f2 bool   `codec:"index=1,removed"`
+ 		F3 string `codec:"index=5"`
+		F4 byte   `codec:"index=4"`
+		f5 string `codec:"index=3"`
 	}
 	testStruct2 struct {
 		f1 any
@@ -60,11 +60,11 @@ type (
 	testStruct5 struct {
 		F1 string
 		F2 bool
-		F3 *testStruct2
+		F3 *testStruct1
 		F4 any
 		f5 int
 		f6 string
-		f7 *testStruct2
+		f7 *testStruct1
 	}
 )
 
