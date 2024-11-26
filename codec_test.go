@@ -1818,6 +1818,33 @@ func Test_ForwardPointerToContainer(t *testing.T) {
 	runTests(items, reg, t)
 }
 
+func Test_ComplexValue(t *testing.T) {
+	reg, typeId := registry()
+	items := []testItem{
+		// #1
+		{
+			newLst(),
+			[]byte{
+				version, typeId((*lst)(nil)), meta_nonil, meta_cntr, // *lst
+				meta_cntr,                                           // lst.root header
+				meta_nonil, meta_ref, c2b0(2),                       // lst.root.next = &lst.root (id = 4)
+				meta_ref, c2b0(5),                                   // lst.root.prev = &lst.root
+				meta_nil,                                            // lst.root.lst = nil
+			},
+			func(expected, actual any) bool {
+				if !defaultEq(expected, actual) {
+					return false
+				}
+				s := actual.(*lst)
+				root := s.root
+				s.root = testNode{}
+				return root.next == root.prev && root.next == &s.root
+			},
+		},
+	}
+	runTests(items, reg, t)
+}
+
 /*func TestPtr(t *testing.T) {
 	elemType := reflect.TypeOf((*any)(nil)).Elem()
 

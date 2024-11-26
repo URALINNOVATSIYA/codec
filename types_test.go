@@ -28,6 +28,7 @@ type (
 	testComplex64     complex64
 	testComplex128    complex128
 	testChan          <-chan *bool
+	testInterface     interface{}
 	testArray         [3]int
 	testSlice         []string
 	testRecSlice      []testRecSlice
@@ -68,7 +69,33 @@ type (
 	}
 )
 
-type testInterface interface{}
+type testNode struct {
+	prev *testNode
+	next *testNode
+	lst  *lst
+}
+
+type lst struct {
+	root testNode
+}
+
+func newLst() *lst {
+	l := &lst{}
+	l.root.next = &l.root
+	l.root.prev = &l.root
+	return l
+}
+
+func (l *lst) push() *testNode {
+	at := l.root.prev
+	el := &testNode{}
+	el.prev = at
+	el.next = at.next
+	el.prev.next = el
+	el.next.prev = el
+	el.lst = l
+	return el
+}
 
 // End test types
 
