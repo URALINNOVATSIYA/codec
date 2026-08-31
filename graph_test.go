@@ -18,7 +18,7 @@ func TestGraph_Fix(t *testing.T) {
 		currentNodeId   int
 		collisionNodeId int
 	}{
-		// #1
+		// #1 (see graph 1)
 		{
 			[]graphNode{
 				{1, 0},
@@ -42,7 +42,41 @@ func TestGraph_Fix(t *testing.T) {
 			4,
 			1,
 		},
-		// 2
+		// #2 (see graph 2)
+		{
+			[]graphNode{
+				{1, 0},
+				{2, 1},
+				{3, 2},
+				{4, 3},
+				{5, 4},
+				{6, 5},
+				{7, 6},
+				{8, 1},
+			},
+			map[int][]int{
+				0: {1},
+				1: {2, 6},
+				2: {3},
+				3: {4},
+				4: {5},
+				5: {6},
+				6: {7},
+				7: {8},
+			},
+			map[int][]int{
+				1: {0},
+				2: {1},
+				3: {2},
+				4: {3},
+				5: {4},
+				6: {1, 5},
+				7: {6},
+				8: {7},
+			},
+			8,
+			6,
+		},
 	}
 	for i, item := range items {
 		graph := NewGraph()
