@@ -15,7 +15,8 @@ const (
 	meta_tru   byte = 0b0000_0011 // boolean true
 	meta_nil   byte = 0b0001_0000 // determines whether underlying value is nil
 	meta_nonil byte = 0b0010_0000 // determines whether underlying value is not nil
-	meta_cntr  byte = 0b0100_0000 // mark of structs or arrays
+	meta_aggr  byte = 0b0100_0000 // mark of structs or arrays
+	meta_cntr  byte = 0b1000_0000 // container that must be referenced later
 )
 
 type Serializer struct {
@@ -105,7 +106,7 @@ func (s *Serializer) traverse(v reflect.Value, parentId int) {
 	if nodeId < 0 {
 		return
 	}
-	s.showGraph(0, "")
+	//s.showGraph(0, "")
 	fmt.Println()
 	switch v.Kind() {
 	case reflect.Slice, reflect.Array:
@@ -180,6 +181,9 @@ func (s *Serializer) encodeNodes() []byte {
 func (s *Serializer) encodeNode(nodeId int) []byte {
 	v := s.graph.GetNodeValue(nodeId)
 	if s.graph.IsVisited(nodeId) {
+		if s.isContainerReference(nodeId) {
+			return s.encodeContainerReference(nodeId)
+		}
 		return s.encodeReference(nodeId)
 	}
 	s.graph.Visit(nodeId)
@@ -187,6 +191,11 @@ func (s *Serializer) encodeNode(nodeId int) []byte {
 }
 
 func (s *Serializer) encodeContainer(containerId int) []byte {
+	if s.graph.IsVisited(containerId) {
+		if s.isContainerReference(containerId) {
+			return s.encodeReference(containerId)
+		}
+	}
 	nodeId := s.graph.Children(containerId)[0]
 	v := s.graph.GetNodeValue(nodeId)
 	return s.visitValue(v, nodeId)
@@ -198,6 +207,9 @@ func (s *Serializer) encodeType(v reflect.Value) []byte {
 
 func (s *Serializer) visitValue(v reflect.Value, nodeId int) []byte {
 	if s.graph.IsVisited(nodeId) {
+		if s.isContainerReference(nodeId) {
+			return s.encodeContainerReference(nodeId)
+		}
 		return s.encodeReference(nodeId)
 	}
 	s.graph.Visit(nodeId)
@@ -364,7 +376,7 @@ func (s *Serializer) encodeFunc(v reflect.Value) []byte {
 }
 
 func (s *Serializer) encodeArray(nodeId int) []byte {
-	b := []byte{meta_cntr}
+	b := []byte{meta_aggr}
 	for _, cntrId := range s.graph.Children(nodeId) {
 		s.graph.Visit(cntrId)
 		b = append(b, s.encodeContainer(cntrId)...)
@@ -388,7 +400,7 @@ func (s *Serializer) encodeMap(v reflect.Value, nodeId int) []byte {
 }
 
 func (s *Serializer) encodeStruct(nodeId int) []byte {
-	b := []byte{meta_cntr}
+	b := []byte{meta_aggr}
 	for _, fieldId := range s.graph.Children(nodeId) {
 		s.graph.Visit(fieldId)
 		b = append(b, s.encodeContainer(fieldId)...)
@@ -408,6 +420,18 @@ func (s *Serializer) encodePointer(nodeId int) []byte {
 	childId := childs[0]
 	b := s.visitValue(s.graph.GetNodeValue(childId), childId)
 	return append([]byte{meta_nonil}, b...)
+}
+
+func (s *Serializer) isContainerReference(id int) bool {
+	children := s.graph.Children(id)
+	return len(children) > 0 && children[0] < id
+}
+
+func (s *Serializer) encodeContainerReference(id int) []byte {
+	s.graph.Leave(id)
+	b := append([]byte{meta_cntr}, s.encodeType(s.graph.GetNodeValue(id))...)
+	b = append(b, c2b(id)...)
+	return append(b, s.encodeContainer(id)...)
 }
 
 func (s *Serializer) encodeReference(id int) []byte {

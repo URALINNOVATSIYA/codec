@@ -5,12 +5,17 @@ import (
 	"reflect"
 )
 
+type tmpValue struct {
+	id int
+	v  Value
+}
+
 type Graph struct {
 	children   map[int][]int
 	parents    map[int][]int
 	vmap       map[int]struct{}
 	values     map[int]Value
-	tmpValues  map[int]Value
+	tmpValues  map[int]tmpValue
 	containers map[Addr]int
 	addresses  map[Addr]int
 }
@@ -99,6 +104,10 @@ func (g *Graph) Visit(nodeId int) {
 	g.vmap[nodeId] = struct{}{}
 }
 
+func (g *Graph) Leave(nodeId int) {
+	delete(g.vmap, nodeId)
+}
+
 func (g *Graph) Fix(currentNodeId, collisionNodeId int) {
 	maxNodeId := g.findMaxNodeId(collisionNodeId, collisionNodeId, collisionNodeId, make(map[int]struct{}))
 
@@ -116,7 +125,7 @@ func (g *Graph) Fix(currentNodeId, collisionNodeId int) {
 
 	inc := currentNodeId - maxNodeId
 	dec := maxNodeId - collisionNodeId + 1
-	g.tmpValues = make(map[int]Value)
+	g.tmpValues = make(map[int]tmpValue)
 
 	g.fixBorderNodes(collisionNodeId, maxNodeId, inc, dec)
 	parents := g.fixParents(collisionNodeId, currentNodeId, maxNodeId, inc, dec)
@@ -131,16 +140,7 @@ func (g *Graph) Fix(currentNodeId, collisionNodeId int) {
 	g.children = g.mergeNodes(g.children, children)
 	g.parents = g.mergeNodes(g.parents, parents)
 
-	for nodeId, v := range g.tmpValues {
-		g.values[nodeId] = v
-		if v.Addr.IsValid() {
-			g.addresses[v.Addr] = nodeId
-		}
-		if v.ContainerAddr.IsValid() {
-			g.containers[v.ContainerAddr] = nodeId
-		}
-	}
-	g.tmpValues = nil
+	g.fixValues()
 }
 
 func (g *Graph) findMaxNodeId(parentNodeId, minNodeId, maxNodeId int, vmap map[int]struct{}) int {
@@ -238,7 +238,7 @@ func (g *Graph) renumberNodeId(nodeId, turnNodeId, inc, dec int) int {
 		id -= dec
 	}
 	if v, exists := g.values[nodeId]; exists {
-		g.tmpValues[id] = v
+		g.tmpValues[id] = tmpValue{id: nodeId, v: v}
 	}
 	return id
 }
@@ -249,4 +249,26 @@ func (g *Graph) mergeNodes(nodes1, nodes2 map[int][]int) map[int][]int {
 	}
 	maps.Copy(nodes1, nodes2)
 	return nodes1
+}
+
+func (g *Graph) fixValues() {
+	visited := make([]int, 0, len(g.tmpValues))
+	for nodeId, v := range g.tmpValues {
+		value := v.v
+		g.values[nodeId] = value
+		if value.Addr.IsValid() {
+			g.addresses[value.Addr] = nodeId
+		}
+		if value.ContainerAddr.IsValid() {
+			g.containers[value.ContainerAddr] = nodeId
+		}
+		if _, exists := g.vmap[v.id]; exists {
+			visited = append(visited, nodeId)
+			delete(g.vmap, v.id)
+		}
+	}
+	for _, nodeId := range visited {
+		g.vmap[nodeId] = struct{}{}
+	}
+	g.tmpValues = nil
 }

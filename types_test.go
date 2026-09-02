@@ -36,12 +36,17 @@ type (
 	testRecMap        map[byte]testRecMap
 	testBoolPtr       *bool
 	testRecPtr        *testRecPtr
-	testS1       struct {
+	testS1            struct {
 		F1 any
 	}
-	testS2       struct {
+	testS2 struct {
 		F1 any
 		F2 any
+	}
+	testS3 struct {
+		F1 any
+		F2 any
+		F3 any
 	}
 	testStruct1 struct {
 		f1 int    `codec:"index=2"`
@@ -49,11 +54,6 @@ type (
 		F3 string `codec:"index=5"`
 		F4 byte   `codec:"index=4"`
 		f5 string `codec:"index=3"`
-	}
-	testStruct2 struct {
-		f1 any
-		f2 any
-		f3 any
 	}
 	testStruct3 struct {
 		f1 *bool

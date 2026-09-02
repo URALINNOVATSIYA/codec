@@ -89,7 +89,7 @@ func (u *Unserializer) decodeType() reflect.Type {
 }
 
 func (u *Unserializer) decodeNode(parentContainerId int) reflect.Value {
-	if u.top() == meta_ref {
+	if u.topIsRef() {
 		return u.decodeReference(nil, parentContainerId)
 	}
 	t := u.decodeType()
@@ -146,7 +146,7 @@ func (u *Unserializer) decodeValue(t reflect.Type, v reflect.Value, parentContai
 	case reflect.UnsafePointer:
 		u.decodeUnsafePointer(v)
 	default:
-		if u.top() == meta_ref {
+		if u.topIsRef() {
 			return u.decodeReference(t, parentContainerId)
 		}
 		u.values[u.id] = v
@@ -366,7 +366,7 @@ func (u *Unserializer) decodeMap(keyType reflect.Type, valueType reflect.Type, v
 }
 
 func (u *Unserializer) decodeStruct(v reflect.Value) {
-	_ = u.readByte() // skip container mark
+	_ = u.readByte() // skip aggregate mark
 	for i, count := 0, v.NumField(); i < count; i++ {
 		field := v.Field(i)
 		u.decodeContainer(field.Type(), field)
@@ -394,7 +394,17 @@ func (u *Unserializer) decodePointer(elemType reflect.Type, v reflect.Value, par
 }
 
 func (u *Unserializer) decodeReference(elemType reflect.Type, parentContainerId int) reflect.Value {
-	_ = u.readByte() // skip reference indicator
+	top := u.readByte() // read meta
+	if top == meta_cntr {
+		t := u.decodeType()
+		id := u.decodeId()
+		v := u.decodeValue(t, reflex.Zero(t), id)
+		container := u.values[id]
+		if v.IsValid() {
+			container.Set(v)
+		}
+		return container
+	}
 	id := u.decodeId()
 	if v, exists := u.values[id]; exists {
 		u.id++
@@ -452,6 +462,11 @@ func (u *Unserializer) setPtrValue(ptr reflect.Value, elemType reflect.Type, ele
 
 func (u *Unserializer) top() byte {
 	return u.data[u.pos]
+}
+
+func (u *Unserializer) topIsRef() bool {
+	top := u.top()
+	return top == meta_ref || top == meta_cntr
 }
 
 func (u *Unserializer) readByte() byte {
