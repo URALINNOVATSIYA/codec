@@ -1231,7 +1231,7 @@ func Test_PointerToSingleValue(t *testing.T) {
 	runTests(items, reg, t)
 }
 
-/*func Test_PointersToTheSameValue(t *testing.T) {
+func Test_PointersToTheSameValue(t *testing.T) {
 	reg, typeId := registry()
 	items := []testItem{
 		// #1
@@ -1239,50 +1239,50 @@ func Test_PointerToSingleValue(t *testing.T) {
 			func() any {
 				b1 := byte(1)
 				b2 := byte(1)
-				s := &testStruct2{}
-				s.f1 = &b1
-				s.f2 = &b2
-				s.f3 = &b1
+				s := &testS3{}
+				s.F1 = &b1
+				s.F2 = &b2
+				s.F3 = &b1
 				return s
 			}(),
 			[]byte{
-				version, typeId((*testStruct2)(nil)), meta_nonil, meta_aggr, // *testStruct2
-				typeId((*byte)(nil)), meta_nonil, 1, // testStruct2.f1 (id = 2)
-				typeId((*byte)(nil)), meta_nonil, 1, // testStruct2.f2 (id = 6)
-				meta_ref, c2b0(4), // testStruct2.f3 is ref to f1 value (id = 10)
+				version, typeId((*testS3)(nil)), meta_nonil, meta_aggr, // *testS3
+				typeId((*byte)(nil)), meta_nonil, 1, // testS3.F1
+				typeId((*byte)(nil)), meta_nonil, 1, // testS3.F2
+				meta_ref, c2b0(4), // testS3.F3 is ref to F1 value
 			},
 			nil,
 		},
 		// #2
 		{
 			func() any {
-				b := byte(1)
-				s := &testStruct2{}
-				s.f2 = &b
-				s.f3 = &b
+				b := "abc"
+				s := &testS3{}
+				s.F2 = &b
+				s.F3 = &b
 				return s
 			}(),
 			[]byte{
-				version, typeId((*testStruct2)(nil)), meta_nonil, meta_aggr, // *testStruct2
-				typeId(nil), meta_nil, // testStruct2.f1 (id = 2)
-				typeId((*byte)(nil)), meta_nonil, 1, // testStruct2.f2 (id = 5)
-				meta_ref, c2b0(7), // testStruct2.f3 is ref to f2 value (id = 9)
+				version, typeId((*testS3)(nil)), meta_nonil, meta_aggr, // *testS3
+				typeId(nil), meta_nil, // testS3.F1
+				typeId((*string)(nil)), meta_nonil, c2b0(3), 'a', 'b', 'c', // testS3.F2
+				meta_ref, c2b0(7), // testS3.F3 is ref to F2 value
 			},
 			nil,
 		},
 		// #3
 		{
 			func() any {
-				s := &testStruct2{}
-				s.f1 = s
-				s.f2 = s
+				s := &testS3{}
+				s.F1 = s
+				s.F2 = s
 				return s
 			}(),
 			[]byte{
-				version, typeId((*testStruct2)(nil)), meta_nonil, meta_aggr, // *testStruct2
-				meta_ref, c2b0(0), // testStruct2.f1 (id = 2) is ref to struct
-				meta_ref, c2b0(0), // testStruct2.f2 (id = 5) is ref to struct
-				typeId(nil), meta_nil, // testStruct2.f3
+				version, typeId((*testS3)(nil)), meta_nonil, meta_aggr, // *testS3
+				meta_ref, c2b0(0), // testS3.F1 (id = 2) is ref to struct
+				meta_ref, c2b0(0), // testS3.F2 (id = 5) is ref to struct
+				typeId(nil), meta_nil, // testS3.F3
 			},
 			nil,
 		},
@@ -1494,7 +1494,7 @@ func Test_CyclicPointerChain(t *testing.T) {
 	runTests(items, reg, t)
 }
 
-func Test_BackwardPointerToContainer(t *testing.T) {
+/*func Test_BackwardPointerToContainer(t *testing.T) {
 	reg, typeId := registry()
 	items := []testItem{
 		// #1
