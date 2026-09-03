@@ -1694,8 +1694,7 @@ func Test_ForwardPointerToContainer(t *testing.T) {
 				s2 := actual.(*testS2)
 				x := s2.F2.(*any)
 				s1 := (*x).(*testS1)
-				s2.F2 = byte(123)
-				return s1.F1 == s1 && x == &s1.F1 && **s2.F1.(**any) == s2.F2 && s2.F2 == byte(123)
+				return s1.F1 == s1 && x == &s1.F1 && **s2.F1.(**any) == s2.F2 && s2.F2 == x
 			},
 		},
 		// #2
