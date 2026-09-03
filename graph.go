@@ -14,6 +14,7 @@ type Graph struct {
 	children   map[int][]int
 	parents    map[int][]int
 	vmap       map[int]struct{}
+	lmap       map[int]struct{}
 	values     map[int]Value
 	tmpValues  map[int]tmpValue
 	containers map[Addr]int
@@ -25,6 +26,7 @@ func NewGraph() *Graph {
 		children:   make(map[int][]int),
 		parents:    make(map[int][]int),
 		vmap:       make(map[int]struct{}),
+		lmap:       make(map[int]struct{}),
 		values:     make(map[int]Value),
 		containers: make(map[Addr]int),
 		addresses:  make(map[Addr]int),
@@ -104,8 +106,13 @@ func (g *Graph) Visit(nodeId int) {
 	g.vmap[nodeId] = struct{}{}
 }
 
-func (g *Graph) Leave(nodeId int) {
-	delete(g.vmap, nodeId)
+func (g *Graph) IsLoop(nodeId int) bool {
+	_, exists := g.lmap[nodeId]
+	return exists
+}
+
+func (g *Graph) Loop(nodeId int) {
+	g.lmap[nodeId] = struct{}{}
 }
 
 func (g *Graph) Fix(currentNodeId, collisionNodeId int) {
@@ -253,6 +260,7 @@ func (g *Graph) mergeNodes(nodes1, nodes2 map[int][]int) map[int][]int {
 
 func (g *Graph) fixValues() {
 	visited := make([]int, 0, len(g.tmpValues))
+	loops := make([]int, 0, len(g.tmpValues)>>1)
 	for nodeId, v := range g.tmpValues {
 		value := v.v
 		g.values[nodeId] = value
@@ -266,9 +274,16 @@ func (g *Graph) fixValues() {
 			visited = append(visited, nodeId)
 			delete(g.vmap, v.id)
 		}
+		if _, exists := g.lmap[v.id]; exists {
+			loops = append(loops, nodeId)
+			delete(g.lmap, v.id)
+		}
 	}
 	for _, nodeId := range visited {
 		g.vmap[nodeId] = struct{}{}
+	}
+	for _, nodeId := range loops {
+		g.lmap[nodeId] = struct{}{}
 	}
 	g.tmpValues = nil
 }

@@ -48,22 +48,22 @@ type (
 		F2 any
 		F3 any
 	}
+	testS3Bool struct {
+		F1 *bool
+		F2 any
+		F3 any
+	}
+	testS3Any struct {
+		F1 *any
+		F2 any
+		F3 any
+	}
 	testStruct1 struct {
 		f1 int    `codec:"index=2"`
 		f2 bool   `codec:"index=1,removed"`
 		F3 string `codec:"index=5"`
 		F4 byte   `codec:"index=4"`
 		f5 string `codec:"index=3"`
-	}
-	testStruct3 struct {
-		f1 *bool
-		f2 any
-		f3 any
-	}
-	testStruct4 struct {
-		f1 *any
-		f2 any
-		f3 any
 	}
 	testStruct5 struct {
 		F1 string
