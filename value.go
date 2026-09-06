@@ -35,10 +35,14 @@ func Address(v reflect.Value) Addr {
 	return Addr{}
 }
 
+type Cell struct {
+	Id  int
+	Ref int
+}
+
 type Value struct {
-	V             reflect.Value
-	Addr          Addr
-	ContainerAddr Addr
+	Ref int
+	V   reflect.Value
 }
 
 func (v Value) Name() string {

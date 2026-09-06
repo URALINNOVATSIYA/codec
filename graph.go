@@ -1,7 +1,6 @@
 package codec
 
 import (
-	"maps"
 	"reflect"
 )
 
@@ -15,7 +14,7 @@ type Graph struct {
 	parents    map[int][]int
 	vmap       map[int]struct{}
 	lmap       map[int]struct{}
-	values     map[int]Value
+	values     []Value
 	tmpValues  map[int]tmpValue
 	containers map[Addr]int
 	addresses  map[Addr]int
@@ -27,7 +26,6 @@ func NewGraph() *Graph {
 		parents:    make(map[int][]int),
 		vmap:       make(map[int]struct{}),
 		lmap:       make(map[int]struct{}),
-		values:     make(map[int]Value),
 		containers: make(map[Addr]int),
 		addresses:  make(map[Addr]int),
 	}
@@ -55,7 +53,7 @@ func (g *Graph) GetNode(nodeId int) Value {
 	return g.values[nodeId]
 }
 
-func (g *Graph) SetNode(nodeId int, value Value) {
+/*func (g *Graph) SetNode(nodeId int, value Value) {
 	g.values[nodeId] = value
 	if value.Addr.IsValid() {
 		g.addresses[value.Addr] = nodeId
@@ -63,9 +61,9 @@ func (g *Graph) SetNode(nodeId int, value Value) {
 	if value.ContainerAddr.IsValid() {
 		g.containers[value.ContainerAddr] = nodeId
 	}
-}
+}*/
 
-func (g *Graph) UpdateNodeValue(nodeId int, oldValue, newValue Value) {
+/*func (g *Graph) UpdateNodeValue(nodeId int, oldValue, newValue Value) {
 	v := &oldValue
 	if newValue.V.IsValid() {
 		v.V = newValue.V
@@ -85,17 +83,16 @@ func (g *Graph) UpdateNodeValue(nodeId int, oldValue, newValue Value) {
 		g.containers[v.ContainerAddr] = nodeId
 	}
 	g.values[nodeId] = *v
+}*/
+
+func (g *Graph) NextId() int {
+	return len(g.values)
 }
 
-func (g *Graph) AddNode(nodeId, parentId int) {
-	g.children[parentId] = append(g.children[parentId], nodeId)
-	g.parents[nodeId] = append(g.parents[nodeId], parentId)
-}
-
-func (g *Graph) AddNodeWithValue(nodeId, parentId int, value Value) {
+/*func (g *Graph) AddNodeWithValue(nodeId, parentId int, value Value) {
 	g.AddNode(nodeId, parentId)
 	g.SetNode(nodeId, value)
-}
+}*/
 
 func (g *Graph) IsVisited(nodeId int) bool {
 	_, exists := g.vmap[nodeId]
@@ -115,7 +112,7 @@ func (g *Graph) Loop(nodeId int) {
 	g.lmap[nodeId] = struct{}{}
 }
 
-func (g *Graph) Fix(currentNodeId, collisionNodeId int) {
+/*func (g *Graph) Fix(currentNodeId, collisionNodeId int) {
 	maxNodeId := g.findMaxNodeId(collisionNodeId, collisionNodeId, collisionNodeId, make(map[int]struct{}))
 
 	if maxNodeId == currentNodeId {
@@ -286,4 +283,4 @@ func (g *Graph) fixValues() {
 		g.lmap[nodeId] = struct{}{}
 	}
 	g.tmpValues = nil
-}
+}*/

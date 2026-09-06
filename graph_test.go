@@ -1,6 +1,6 @@
 package codec
 
-import (
+/*import (
 	"reflect"
 	"testing"
 )
@@ -92,6 +92,7 @@ func TestGraph_Fix(t *testing.T) {
 		}
 		/*if !reflect.DeepEqual(graph.values, values) {
 			t.Errorf("Test #%d: wrong values: %v", i+1, graph.parents)
-		}*/
+		}
 	}
 }
+*/

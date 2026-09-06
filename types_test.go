@@ -48,6 +48,12 @@ type (
 		F2 any
 		F3 any
 	}
+	testS4 struct {
+		F1 any
+		F2 any
+		F3 any
+		F4 any
+	}
 	testS3Bool struct {
 		F1 *bool
 		F2 any

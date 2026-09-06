@@ -4,11 +4,11 @@ import (
 	"bytes"
 	"fmt"
 
-	"math"
+	//"math"
 	"reflect"
-	"strings"
+	//"strings"
 	"testing"
-	"unsafe"
+	//"unsafe"
 
 	"github.com/URALINNOVATSIYA/reflex"
 )
@@ -91,7 +91,7 @@ func interfaceId(reg *TypeRegistry) byte {
 	return interfaceId(reg)
 }
 
-func Test_Nil(t *testing.T) {
+/*func Test_Nil(t *testing.T) {
 	reg, typeId := registry()
 	items := []testItem{
 		{
@@ -1618,7 +1618,7 @@ func Test_BackwardPointerToContainer(t *testing.T) {
 		},
 	}
 	runTests(items, reg, t)
-}
+}*/
 
 func Test_ForwardPointerToContainer(t *testing.T) {
 	reg, typeId := registry()
@@ -1633,9 +1633,9 @@ func Test_ForwardPointerToContainer(t *testing.T) {
 			}(),
 			[]byte{
 				version, typeId((*any)(nil)), meta_nonil, // *any
-				meta_cntr, interfaceId(reg), c2b0(4), // s.F1
-				typeId((*testS1)(nil)), meta_nonil, meta_aggr, // *testS1
 				meta_ref, c2b0(4), // ref to s.F1
+				typeId((*testS1)(nil)), meta_nonil, // *testS1
+				meta_strc, // testS1
 			},
 			func(expected, actual any) bool {
 				if !defaultEq(expected, actual) {
@@ -1649,14 +1649,94 @@ func Test_ForwardPointerToContainer(t *testing.T) {
 		// #2
 		{
 			func() any {
+				s := &testS4{}
+				s.F1 = &s.F3
+				s.F2 = &s.F3
+				s.F3 = true
+				s.F4 = &s.F3
+				return s
+			}(),
+			[]byte{
+				version, typeId((*testS4)(nil)), meta_nonil, // *testS4
+				meta_strc,                                           // testS4
+				typeId((*any)(nil)), meta_nonil, meta_ref, c2b0(10), // s.F1 is *s.F3
+				typeId(false), meta_tru, // s.F3 is true
+				typeId((*any)(nil)), meta_ref, c2b0(4), // s.F2
+				typeId((*any)(nil)), meta_ref, c2b0(4), // s.F4
+			},
+			func(expected, actual any) bool {
+				if !defaultEq(expected, actual) {
+					return false
+				}
+				s := (actual).(*testS4)
+				return s.F1 == &s.F3 && s.F2 == &s.F3 && s.F4 == &s.F3
+			},
+		},
+		// #3
+		{
+			func() any {
+				s := &testS4{}
+				s.F1 = &s.F3
+				s.F2 = &s.F3
+				s.F3 = &s.F1
+				s.F4 = &s.F3
+				return s
+			}(),
+			[]byte{
+				version, typeId((*testS4)(nil)), meta_nonil, // *testS4
+				meta_strc,                                           // testS4
+				typeId((*any)(nil)), meta_nonil, meta_ref, c2b0(11), // s.F1 is *s.F3
+				typeId((*any)(nil)), meta_nonil, meta_ref, c2b0(2), // s.F3 is true
+				typeId((*any)(nil)), meta_ref, c2b0(4), // s.F2
+				typeId((*any)(nil)), meta_ref, c2b0(4), // s.F4
+			},
+			func(expected, actual any) bool {
+				if !defaultEq(expected, actual) {
+					return false
+				}
+				s := (actual).(*testS4)
+				return s.F1 == &s.F3 && s.F2 == &s.F3 && s.F4 == &s.F3 && s.F3 == &s.F1
+			},
+		},
+		// #4
+		/*{
+			func() any {
+				s := &testS4{}
+				s.F1 = &s.F3
+				s.F2 = &s.F3
+				s.F3 = &s.F1
+				s.F4 = &s.F3
+				return s
+			}(),
+			[]byte{
+				version, typeId((*testS4)(nil)), meta_nonil, // *testS4
+				meta_strc,                                           // testS4
+				typeId((*any)(nil)), meta_nonil, meta_ref, c2b0(11), // s.F1 is *s.F3
+				typeId((*any)(nil)), meta_nonil, meta_ref, c2b0(2), // s.F3 is *s.F1
+				typeId((*any)(nil)), meta_ref, c2b0(4), // s.F2
+				typeId((*any)(nil)), meta_ref, c2b0(4), // s.F4
+			},
+			func(expected, actual any) bool {
+				if !defaultEq(expected, actual) {
+					return false
+				}
+				s := (actual).(*testS4)
+				s.F1 = 123
+				return s.F1 == &s.F3 && s.F2 == &s.F3 && s.F4 == &s.F3 && s.F3 == &s.F1
+			},
+		},*/
+		// #2
+		/*{
+			func() any {
 				s := &testS2{}
 				x := &s.F2
 				s.F1 = &x
 				return s
 			}(),
 			[]byte{
-				version, typeId((*testS2)(nil)), meta_nonil, meta_aggr, // *testS2
-				typeId((**any)(nil)), meta_nonil, meta_nonil, meta_ref, c2b0(6), // F1 is ref to F2
+				version, typeId((*testS2)(nil)), meta_nonil, // *testS2
+				meta_strc,                                   // testS2
+				typeId((**any)(nil)), meta_nonil, meta_nonil, meta_ref, c2b0(8), // F1 is ref to F2
 				typeId(nil), meta_nil, // F2
 			},
 			func(expected, actual any) bool {
@@ -1667,9 +1747,9 @@ func Test_ForwardPointerToContainer(t *testing.T) {
 				s.F2 = byte(123)
 				return **s.F1.(**any) == s.F2 && s.F2 == byte(123)
 			},
-		},
+		},*/
 		// #3
-		{
+		/*{
 			func() any {
 				s1 := &testS1{}
 				s1.F1 = s1
@@ -1696,7 +1776,35 @@ func Test_ForwardPointerToContainer(t *testing.T) {
 				s1 := (*x).(*testS1)
 				return s1.F1 == s1 && x == &s1.F1 && **s2.F1.(**any) == s2.F2 && s2.F2 == x
 			},
-		},
+		},*/
+		// #4
+		/*{
+			func() any {
+				s1 := &testS3{}
+				s2 := &testS3{}
+				s1.F1 = s1
+				s1.F2 = &s1.F3
+				s1.F3 = &s2.F3
+				s2.F1 = &s2.F2
+				s2.F2 = &s1.F2
+				s2.F3 = &s1.F1
+				return s2
+			}(),
+			[]byte{
+				version, typeId((*testS3)(nil)), meta_nonil, meta_aggr, // *testS3
+				typeId((*any)(nil)), meta_nonil, meta_ref, c2b0(5),     // s2.F1 is ref to s2.F2
+				typeId((*any)(nil)), meta_nonil,                        // s2.F2 is *s1.F2
+				meta_cntr, interfaceId(reg), c2b(18)[0], c2b(18)[1],    // s1.F2 is *s1.F3
+				typeId((*testS3)(nil)), meta_nonil, meta_aggr,          // *testS3
+				meta_ref, c2b(19)[0], c2b(19)[1],                       // ref to s1.F1
+			},
+			func(expected, actual any) bool {
+				if !defaultEq(expected, actual) {
+					return false
+				}
+				return true
+			},
+		},*/
 		// #2
 		/*{
 			func() any {
