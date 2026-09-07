@@ -4,11 +4,11 @@ import (
 	"bytes"
 	"fmt"
 
-	//"math"
+	"math"
 	"reflect"
-	//"strings"
+	"strings"
 	"testing"
-	//"unsafe"
+	"unsafe"
 
 	"github.com/URALINNOVATSIYA/reflex"
 )
@@ -91,7 +91,7 @@ func interfaceId(reg *TypeRegistry) byte {
 	return interfaceId(reg)
 }
 
-/*func Test_Nil(t *testing.T) {
+func Test_Nil(t *testing.T) {
 	reg, typeId := registry()
 	items := []testItem{
 		{
@@ -1113,10 +1113,10 @@ func Test_ReferenceToTheSameValue(t *testing.T) {
 			}(),
 			[]byte{
 				version,
-				typeId(testS3{}), meta_aggr, // testS3 header
+				typeId(testS3{}), meta_strc, // testS3 header
 				typeId(""), c2b0(3), 'a', 'b', 'c', // testS3.F1 (id = 1)
 				typeId(nil), meta_nil, // testS3.F2 (id = 4)
-				meta_ref, c2b0(3), // testS3.F3 (id = 7)
+				typeId(""), meta_ref, c2b0(3), // testS3.F3 (id = 7)
 			},
 			nil,
 		},
@@ -1130,9 +1130,9 @@ func Test_ReferenceToTheSameValue(t *testing.T) {
 			}(),
 			[]byte{
 				version,
-				typeId(testS3{}), meta_aggr, // testS3 header
+				typeId(testS3{}), meta_strc, // testS3 header
 				typeId(registry), meta_nonil, // testS3.F1 (id = 1)
-				meta_ref, c2b0(3), // testS3.F2 (id = 4)
+				typeId(registry), meta_ref, c2b0(3), // testS3.F2 (id = 4)
 				typeId(nil), meta_nil, // testS3.F3 (id = 7)
 			},
 			func(expected, actual any) bool {
@@ -1152,10 +1152,10 @@ func Test_ReferenceToTheSameValue(t *testing.T) {
 			}(),
 			[]byte{
 				version,
-				typeId(testS3{}), meta_aggr, // testS3 header
+				typeId(testS3{}), meta_strc, // testS3 header
 				typeId(nil), meta_nil, // testS3.F1 (id = 1)
 				typeId((chan<- byte)(nil)), meta_nonil, c2b0(15), // testS3.F2 (id = 4)
-				meta_ref, c2b0(6), // testS3.F3 (id = 7)
+				typeId((chan<- byte)(nil)), meta_ref, c2b0(6), // testS3.F3 (id = 7)
 			},
 			func(expected, actual any) bool {
 				e := expected.(testS3)
@@ -1246,10 +1246,10 @@ func Test_PointersToTheSameValue(t *testing.T) {
 				return s
 			}(),
 			[]byte{
-				version, typeId((*testS3)(nil)), meta_nonil, meta_aggr, // *testS3
+				version, typeId((*testS3)(nil)), meta_nonil, meta_strc, // *testS3
 				typeId((*byte)(nil)), meta_nonil, 1, // testS3.F1
 				typeId((*byte)(nil)), meta_nonil, 1, // testS3.F2
-				meta_ref, c2b0(4), // testS3.F3 is ref to F1 value
+				typeId((*byte)(nil)), meta_ref, c2b0(4), // testS3.F3 is ref to F1 value
 			},
 			nil,
 		},
@@ -1263,10 +1263,10 @@ func Test_PointersToTheSameValue(t *testing.T) {
 				return s
 			}(),
 			[]byte{
-				version, typeId((*testS3)(nil)), meta_nonil, meta_aggr, // *testS3
+				version, typeId((*testS3)(nil)), meta_nonil, meta_strc, // *testS3
 				typeId(nil), meta_nil, // testS3.F1
 				typeId((*string)(nil)), meta_nonil, c2b0(3), 'a', 'b', 'c', // testS3.F2
-				meta_ref, c2b0(7), // testS3.F3 is ref to F2 value
+				typeId((*string)(nil)), meta_ref, c2b0(7), // testS3.F3 is ref to F2 value
 			},
 			nil,
 		},
@@ -1279,9 +1279,9 @@ func Test_PointersToTheSameValue(t *testing.T) {
 				return s
 			}(),
 			[]byte{
-				version, typeId((*testS3)(nil)), meta_nonil, meta_aggr, // *testS3
-				meta_ref, c2b0(0), // testS3.F1 (id = 2) is ref to struct
-				meta_ref, c2b0(0), // testS3.F2 (id = 5) is ref to struct
+				version, typeId((*testS3)(nil)), meta_nonil, meta_strc, // *testS3
+				typeId((*testS3)(nil)), meta_ref, c2b0(0), // testS3.F1 (id = 2) is ref to struct
+				typeId((*testS3)(nil)), meta_ref, c2b0(0), // testS3.F2 (id = 5) is ref to struct
 				typeId(nil), meta_nil, // testS3.F3
 			},
 			nil,
@@ -1341,7 +1341,7 @@ func Test_CyclicPointerChain(t *testing.T) {
 				x = &x
 				return x
 			}(),
-			[]byte{version, typeId((*any)(nil)), meta_nonil, meta_ref, c2b0(0)},
+			[]byte{version, typeId((*any)(nil)), meta_nonil, typeId((*any)(nil)), meta_ref, c2b0(0)},
 			func(_, actual any) bool {
 				v := actual.(*any)
 				return v == *v
@@ -1358,7 +1358,7 @@ func Test_CyclicPointerChain(t *testing.T) {
 			[]byte{
 				version,
 				typeId((*any)(nil)), meta_nonil, // x1
-				typeId((*any)(nil)), meta_nonil, meta_ref, c2b0(0), // x2
+				typeId((*any)(nil)), meta_nonil, typeId((*any)(nil)), meta_ref, c2b0(0), // x2
 			},
 			func(_, actual any) bool {
 				x1 := actual.(*any)
@@ -1379,7 +1379,7 @@ func Test_CyclicPointerChain(t *testing.T) {
 				version,
 				typeId((*any)(nil)), meta_nonil, // x1
 				typeId((*any)(nil)), meta_nonil, // x2
-				typeId((*any)(nil)), meta_nonil, meta_ref, c2b0(0), // x3
+				typeId((*any)(nil)), meta_nonil, typeId((*any)(nil)), meta_ref, c2b0(0), // x3
 			},
 			func(_, actual any) bool {
 				x1 := actual.(*any)
@@ -1448,8 +1448,8 @@ func Test_CyclicPointerChain(t *testing.T) {
 				var x1 any
 				var x2 *any
 				var x3 **any
-				x2 = &x1
 				x3 = &x2
+				x2 = &x1
 				x1 = x3
 				return x3
 			}(),
@@ -1457,7 +1457,7 @@ func Test_CyclicPointerChain(t *testing.T) {
 				version,
 				typeId((**any)(nil)), meta_nonil, // x3
 				meta_nonil,        // x2
-				meta_ref, c2b0(0), // x1 == x3
+				typeId((**any)(nil)), meta_ref, c2b0(0), // x1 == x3
 			},
 			func(_, actual any) bool {
 				x3 := actual.(**any)
@@ -1472,8 +1472,8 @@ func Test_CyclicPointerChain(t *testing.T) {
 				var x1 any
 				var x2 *any
 				var x3 **any
-				x2 = &x1
 				x3 = &x2
+				x2 = &x1
 				x1 = &x3
 				return x3
 			}(),
@@ -1494,7 +1494,7 @@ func Test_CyclicPointerChain(t *testing.T) {
 	runTests(items, reg, t)
 }
 
-func Test_BackwardPointerToContainer(t *testing.T) {
+/*func Test_BackwardPointerToContainer(t *testing.T) {
 	reg, typeId := registry()
 	items := []testItem{
 		// #1
@@ -1699,55 +1699,29 @@ func Test_ForwardPointerToContainer(t *testing.T) {
 			},
 		},
 		// #4
-		/*{
-			func() any {
-				s := &testS4{}
-				s.F1 = &s.F3
-				s.F2 = &s.F3
-				s.F3 = &s.F1
-				s.F4 = &s.F3
-				return s
-			}(),
-			[]byte{
-				version, typeId((*testS4)(nil)), meta_nonil, // *testS4
-				meta_strc,                                           // testS4
-				typeId((*any)(nil)), meta_nonil, meta_ref, c2b0(11), // s.F1 is *s.F3
-				typeId((*any)(nil)), meta_nonil, meta_ref, c2b0(2), // s.F3 is *s.F1
-				typeId((*any)(nil)), meta_ref, c2b0(4), // s.F2
-				typeId((*any)(nil)), meta_ref, c2b0(4), // s.F4
-			},
-			func(expected, actual any) bool {
-				if !defaultEq(expected, actual) {
-					return false
-				}
-				s := (actual).(*testS4)
-				s.F1 = 123
-				return s.F1 == &s.F3 && s.F2 == &s.F3 && s.F4 == &s.F3 && s.F3 == &s.F1
-			},
-		},*/
-		// #2
-		/*{
+		{
 			func() any {
 				s := &testS2{}
 				x := &s.F2
+				y := &s.F1
 				s.F1 = &x
+				s.F2 = &y
 				return s
 			}(),
 			[]byte{
 				version, typeId((*testS2)(nil)), meta_nonil, // *testS2
-				meta_strc,                                   // testS2
-				typeId((**any)(nil)), meta_nonil, meta_nonil, meta_ref, c2b0(8), // F1 is ref to F2
-				typeId(nil), meta_nil, // F2
+				meta_strc,                                                        // testS2
+				typeId((**any)(nil)), meta_nonil, meta_nonil, meta_ref, c2b0(10), // F1
+				typeId((**any)(nil)), meta_nonil, meta_nonil, meta_ref, c2b0(2), // F2
 			},
 			func(expected, actual any) bool {
 				if !defaultEq(expected, actual) {
 					return false
 				}
 				s := actual.(*testS2)
-				s.F2 = byte(123)
-				return **s.F1.(**any) == s.F2 && s.F2 == byte(123)
+				return **s.F1.(**any) == s.F2 && **s.F2.(**any) == s.F1
 			},
-		},*/
+		},
 		// #3
 		/*{
 			func() any {

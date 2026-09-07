@@ -377,7 +377,6 @@ func (u *Unserializer) decodePointer(elemType reflect.Type, v reflect.Value, con
 	elemValue := reflex.Zero(elemType)
 	v.Set(reflex.PtrAt(elemType, elemValue))
 	id := len(u.values)
-	fmt.Println(reflex.NameOf(elemType))
 	p := ptr{
 		id:       id,
 		elemType: elemType,
@@ -452,7 +451,15 @@ func (u *Unserializer) restorePointer(ptrId int, pointedValue ptr) {
 	if id, exists := u.ptrs[pointedValue.id]; exists {
 		u.restorePointer(pointedValue.id, id)
 	}
-	v := u.values[pointedValue.id]
+	var v reflect.Value
+	v = u.values[pointedValue.id]
+	if v.Kind() == reflect.Interface {
+		nid := pointedValue.id + 1
+		if nptr, exists := u.ptrs[nid]; exists {
+			u.restorePointer(nid, nptr)
+			v.Set(u.values[nid])
+		}
+	}
 	u.setPtrValue(ptr, pointedValue.elemType, v)
 	for _, cid := range pointedValue.containerId {
 		u.values[cid].Set(ptr)
