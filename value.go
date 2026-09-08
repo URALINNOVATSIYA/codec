@@ -9,7 +9,7 @@ import (
 
 type Addr struct {
 	Ptr  unsafe.Pointer
-	Type string
+	Type reflect.Type
 }
 
 func (a Addr) IsValid() bool {
@@ -24,12 +24,12 @@ func Address(v reflect.Value) Addr {
 	case reflect.Struct, reflect.Array:
 		return Addr{
 			Ptr:  reflex.PtrOf(v),
-			Type: reflex.NameOf(v.Type()),
+			Type: v.Type(),
 		}
 	case reflect.String, reflect.Slice, reflect.Map, reflect.Chan, reflect.Func, reflect.Pointer:
 		return Addr{
 			Ptr:  reflex.DirPtrOf(v),
-			Type: reflex.NameOf(v.Type()),
+			Type: v.Type(),
 		}
 	}
 	return Addr{}

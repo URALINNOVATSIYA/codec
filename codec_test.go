@@ -1456,7 +1456,7 @@ func Test_CyclicPointerChain(t *testing.T) {
 			[]byte{
 				version,
 				typeId((**any)(nil)), meta_nonil, // x3
-				meta_nonil,        // x2
+				meta_nonil,                              // x2
 				typeId((**any)(nil)), meta_ref, c2b0(0), // x1 == x3
 			},
 			func(_, actual any) bool {
@@ -1494,7 +1494,7 @@ func Test_CyclicPointerChain(t *testing.T) {
 	runTests(items, reg, t)
 }
 
-/*func Test_BackwardPointerToContainer(t *testing.T) {
+func Test_BackwardPointerToContainer(t *testing.T) {
 	reg, typeId := registry()
 	items := []testItem{
 		// #1
@@ -1507,10 +1507,10 @@ func Test_CyclicPointerChain(t *testing.T) {
 				return s
 			}(),
 			[]byte{
-				version, typeId((*testS3)(nil)), meta_nonil, meta_aggr, // *testS3
+				version, typeId((*testS3)(nil)), meta_nonil, meta_strc, // *testS3
 				typeId(false), meta_tru, // F1
 				typeId((*any)(nil)), meta_nonil, meta_ref, c2b0(2), // F2 is *F1
-				meta_ref, c2b0(7), // f3 is *F1
+				typeId((*any)(nil)), meta_ref, c2b0(7), // f3 is *F1
 			},
 			func(expected, actual any) bool {
 				if !defaultEq(expected, actual) {
@@ -1532,10 +1532,10 @@ func Test_CyclicPointerChain(t *testing.T) {
 				return s
 			}(),
 			[]byte{
-				version, typeId((*testS3Bool)(nil)), meta_nonil, meta_aggr, // *testS3Bool
+				version, typeId((*testS3Bool)(nil)), meta_nonil, meta_strc, // *testS3Bool
 				meta_nonil, meta_tru, // F1
 				typeId((**bool)(nil)), meta_nonil, meta_ref, c2b0(2), // F2 is *F1
-				meta_ref, c2b0(7), // F3 is *F1
+				typeId((**bool)(nil)), meta_ref, c2b0(7), // F3 is *F1
 			},
 			func(expected, actual any) bool {
 				if !defaultEq(expected, actual) {
@@ -1557,10 +1557,10 @@ func Test_CyclicPointerChain(t *testing.T) {
 				return s
 			}(),
 			[]byte{
-				version, typeId((*testS3Any)(nil)), meta_nonil, meta_aggr, // *testS3Any
+				version, typeId((*testS3Any)(nil)), meta_nonil, meta_strc, // *testS3Any
 				meta_nonil, typeId(false), meta_tru, // F1
 				typeId((**any)(nil)), meta_nonil, meta_ref, c2b0(2), // F2 is *F1
-				meta_ref, c2b0(8), // F3 is *F1
+				typeId((**any)(nil)), meta_ref, c2b0(8), // F3 is *F1
 			},
 			func(expected, actual any) bool {
 				if !defaultEq(expected, actual) {
@@ -1581,10 +1581,10 @@ func Test_CyclicPointerChain(t *testing.T) {
 				return s
 			}(),
 			[]byte{
-				version, typeId((*testS3)(nil)), meta_nonil, meta_aggr, // *testS3
-				meta_ref, c2b0(0), // F1 is ref to s
+				version, typeId((*testS3)(nil)), meta_nonil, meta_strc, // *testS3
+				typeId((*testS3)(nil)), meta_ref, c2b0(0), // F1 is ref to s
 				typeId((*any)(nil)), meta_nonil, meta_ref, c2b0(2), // F2 is *F1
-				meta_ref, c2b0(6), // F3 is ref to F2 value
+				typeId((*any)(nil)), meta_ref, c2b0(7), // F3 is ref to F2 value
 			},
 			func(expected, actual any) bool {
 				if !defaultEq(expected, actual) {
@@ -1603,7 +1603,7 @@ func Test_CyclicPointerChain(t *testing.T) {
 				return s
 			}(),
 			[]byte{
-				version, typeId((*testS3)(nil)), meta_nonil, meta_aggr, // *testS3
+				version, typeId((*testS3)(nil)), meta_nonil, meta_strc, // *testS3
 				typeId(nil), meta_nil, // F1
 				typeId((*any)(nil)), meta_nonil, meta_ref, c2b0(5), // F2 is ref to F2
 				typeId(nil), meta_nil, // F3
@@ -1618,7 +1618,7 @@ func Test_CyclicPointerChain(t *testing.T) {
 		},
 	}
 	runTests(items, reg, t)
-}*/
+}
 
 func Test_ForwardPointerToContainer(t *testing.T) {
 	reg, typeId := registry()

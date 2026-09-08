@@ -85,7 +85,7 @@ func (s *Serializer) addReferenceValue(v reflect.Value) bool {
 func (s *Serializer) addContainer(v reflect.Value) bool {
 	addr := Addr{
 		reflex.PtrOf(v),
-		reflex.NameOf(v.Type()),
+		v.Type(),
 	}
 	id, exists := s.containers[addr]
 	s.containers[addr] = len(s.values)
@@ -178,7 +178,7 @@ func (s *Serializer) traversePointer(v reflect.Value) {
 	elem := v.Elem()
 	addr := Addr{
 		Ptr:  reflex.DirPtrOf(v),
-		Type: reflex.NameOf(elem.Type()),
+		Type: elem.Type(),
 	}
 	if id, exists := s.containers[addr]; exists {
 		s.values = append(s.values, Value{Ref: id})
