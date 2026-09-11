@@ -2,55 +2,35 @@ package codec
 
 import (
 	"reflect"
+	"unsafe"
+
+	"github.com/URALINNOVATSIYA/reflex"
 )
 
-var serializableInterfaceType = reflect.TypeOf((*Serializable)(nil)).Elem()
-
-func isSerializable(v reflect.Value) bool {
-	if v.IsValid() {
-		t := v.Type()
-		if isPointer(t) {
-			if isCommonType(t.Elem()) {
-				return false
-			}
-		} else if isCommonType(t) {
-			return false
-		}
-		return t.Implements(serializableInterfaceType)
-	}
-	return false
+type Addr struct {
+	Ptr  unsafe.Pointer
+	Type reflect.Type
 }
 
-func isNil(v reflect.Value) bool {
+func (a Addr) IsValid() bool {
+	return a.Ptr != nil
+}
+
+func Address(v reflect.Value) Addr {
+	if !v.IsValid() {
+		return Addr{}
+	}
 	switch v.Kind() {
-	case reflect.Interface,
-		reflect.Map, reflect.Slice,
-		reflect.Pointer, reflect.UnsafePointer,
-		reflect.Chan, reflect.Func:
-		return v.IsNil()
-	default:
-		return false
+	case reflect.Struct, reflect.Array:
+		return Addr{
+			Ptr:  reflex.PtrOf(v),
+			Type: v.Type(),
+		}
+	case reflect.String, reflect.Slice, reflect.Map, reflect.Chan, reflect.Func, reflect.Pointer:
+		return Addr{
+			Ptr:  reflex.DirPtrOf(v),
+			Type: v.Type(),
+		}
 	}
-}
-
-func isPointer(t reflect.Type) bool {
-	return t.Kind() == reflect.Pointer
-}
-
-func isSimplePointer(t reflect.Type) bool {
-	return isPointer(t) && isCommonType(t)
-}
-
-func isCommonType(t reflect.Type) bool {
-	name := t.Name()
-	if name == "" {
-		return true
-	}
-	if name == t.Kind().String() {
-		return true
-	}
-	if t.Kind() == reflect.UnsafePointer && name == "Pointer" {
-		return true
-	}
-	return false
+	return Addr{}
 }

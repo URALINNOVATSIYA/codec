@@ -2,11 +2,10 @@ package codec
 
 import (
 	"reflect"
+	"strconv"
 	"testing"
 	"unsafe"
 )
-
-// Test types
 
 type (
 	testBool          bool
@@ -28,7 +27,7 @@ type (
 	testComplex64     complex64
 	testComplex128    complex128
 	testChan          <-chan *bool
-	testInterface     interface{}
+	testInterface     any
 	testArray         [3]int
 	testSlice         []string
 	testRecSlice      []testRecSlice
@@ -64,6 +63,9 @@ type (
 		F2 any
 		F3 any
 	}
+	testS1Ptr struct {
+		F1 *testS1Ptr
+	}
 	testStruct1 struct {
 		f1 int    `codec:"index=2"`
 		f2 bool   `codec:"index=1,removed"`
@@ -71,16 +73,17 @@ type (
 		F4 byte   `codec:"index=4"`
 		f5 string `codec:"index=3"`
 	}
-	testStruct5 struct {
-		F1 string
-		F2 bool
-		F3 *testStruct1
-		F4 any
-		f5 int
-		f6 string
-		f7 *testStruct1
-	}
 )
+
+type testSerializableInt int
+
+func (i testSerializableInt) Serialize() []byte {
+	return []byte(strconv.Itoa(int(i)))
+}
+
+func (i testSerializableInt) Unserialize(b []byte) (any, error) {
+	return strconv.Atoi(string(b))
+}
 
 type testNode struct {
 	prev *testNode
@@ -110,9 +113,15 @@ func (l *lst) push() *testNode {
 	return el
 }
 
-// End test types
+func testSum(a, b int) int {
+	return a + b
+}
 
-func TestTypeIdByValue(t *testing.T) {
+func testDiv(a, b int) int {
+	return a / b
+}
+
+func Test_TypeIdByValue(t *testing.T) {
 	items := []struct {
 		value       any
 		encodedType int

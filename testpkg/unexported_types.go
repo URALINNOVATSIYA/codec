@@ -1,4 +1,4 @@
-package tstpkg
+package testpkg
 
 type unexportedFuncType func() int
 
