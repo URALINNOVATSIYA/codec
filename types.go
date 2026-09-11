@@ -62,15 +62,36 @@ func (r *TypeRegistry) RegisterBaseTypes() {
 	r.RegisterTypeOf(complex128(0))
 	r.RegisterTypeOf(uintptr(0))
 	r.RegisterTypeOf(unsafe.Pointer(nil))
-	r.RegisterType(reflect.TypeOf((*any)(nil)).Elem()) // interface {}
+	r.RegisterType(reflect.TypeFor[any]()) // interface {}
 }
 
 func (r *TypeRegistry) RegisterTypeOf(v any) {
 	t := reflect.TypeOf(v)
+	r.RegisterTypeRec(t)
 	if t != nil && t.Kind() == reflect.Func {
 		r.RegisterFunc(v)
-	} else {
-		r.RegisterType(t)
+	}
+}
+
+func (r *TypeRegistry) RegisterTypeRec(t reflect.Type) {
+	r.RegisterType(t)
+	switch t.Kind() {
+	case reflect.Map:
+		r.RegisterTypeRec(t.Key())
+		fallthrough
+	case reflect.Array, reflect.Slice, reflect.Chan, reflect.Pointer:
+		r.RegisterTypeRec(t.Elem())
+	case reflect.Struct:
+		for field := range t.Fields() {
+			r.RegisterTypeRec(field.Type)
+		}
+	case reflect.Func:
+		for in := range t.Ins() {
+			r.RegisterTypeRec(in)
+		}
+		for out := range t.Outs() {
+			r.RegisterTypeRec(out)
+		}
 	}
 }
 

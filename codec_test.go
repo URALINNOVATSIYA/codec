@@ -1651,7 +1651,14 @@ func Test_Struct(t *testing.T) {
 				return s
 			}(),
 			nil,
-			nil,
+			func(expected, actual any) bool {
+				if !defaultEq(expected, actual) {
+					return false
+				}
+				s := actual.(*testS3)
+				s.F1 = false
+				return (*s.F3.(*map[any]bool))[1]
+			},
 		},
 	}
 	runTests(items, reg, t)
