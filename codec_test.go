@@ -5,12 +5,15 @@ import (
 	"errors"
 	"fmt"
 
+	"sync"
+
 	"math"
 	"reflect"
 	"strings"
 	"testing"
 	"unsafe"
 
+	"github.com/URALINNOVATSIYA/codec/testpkg"
 	"github.com/URALINNOVATSIYA/reflex"
 )
 
@@ -1586,6 +1589,74 @@ func Test_Array(t *testing.T) {
 	runTests(items, reg, t)
 }
 
+func Test_Struct(t *testing.T) {
+	reg, typeId := registry()
+	items := []testItem{
+		// #1
+		{
+			struct{}{},
+			[]byte{version, typeId(struct{}{}), meta_strc},
+			nil,
+		},
+		// #2
+		{
+			testpkg.Get(),
+			nil,
+			func(_, actual any) bool {
+				return testpkg.Check(actual)
+			},
+		},
+		// #3
+		{
+			func() any {
+				m := &sync.Mutex{}
+				m.Lock()
+				return m
+			}(),
+			nil,
+			func(expected, actual any) bool {
+				if !defaultEq(expected, actual) {
+					return false
+				}
+				m := actual.(*sync.Mutex)
+				return !m.TryLock()
+			},
+		},
+		// #4
+		{
+			func() any {
+				w := &sync.WaitGroup{}
+				w.Add(5)
+				return w
+			}(),
+			nil,
+			func(expected, actual any) bool {
+				if !defaultEq(expected, actual) {
+					return false
+				}
+				w := actual.(*sync.WaitGroup)
+				w.Add(-5)
+				w.Wait()
+				return true
+			},
+		},
+		// #5
+		{
+			func() any {
+				m := map[any]bool{1: true}
+				s := &testS3{}
+				s.F1 = m
+				s.F2 = [2]int{1, 2}
+				s.F3 = &m
+				return s
+			}(),
+			nil,
+			nil,
+		},
+	}
+	runTests(items, reg, t)
+}
+
 func Test_ReferenceToTheSameValue(t *testing.T) {
 	reg, typeId, funcId := registryWithFuncId()
 	items := []testItem{
@@ -2065,68 +2136,3 @@ func Test_MixedContainerPointers(t *testing.T) {
 	}
 	runTests(items, reg, t)
 }
-
-/*func Test_StructWithoutTags(t *testing.T) {
-	reg, typeId := registry()
-	items := []testItem{
-		// #1
-		{
-			testStruct1{
-				123,
-				true,
-				"abc",
-				0,
-				"abc",
-			},
-			[]byte{
-				version,
-				typeId(testStruct1{}), meta_aggr, // testStruct1 header
-				0b0010_0000, 246, // testStruct1.f1 (id = 1)
-				meta_tru,               // testStruct1.f2 (id = 3)
-				c2b0(3), 'a', 'b', 'c', // testStruct1.F3 (id = 5)
-				0,                 // testStruct1.F4 (id = 7)
-				meta_ref, c2b0(6), // ref to testStruct1.F3 (id = 9)
-			},
-			nil,
-		},
-		// #2
-		{
-			testStruct2{
-				testStruct1{
-					111,
-					true,
-					"abcde",
-					0,
-					"",
-				},
-				nil,
-				testStruct1{
-					0,
-					false,
-					"",
-					128,
-					"abcde",
-				},
-			},
-			[]byte{
-				version,
-				typeId(testStruct2{}), meta_aggr, // testStruct2 header
-				typeId(testStruct1{}), meta_aggr, // testStruct2.f1 (id = 2)
-				0b0010_0000, 222, // testStruct2.f1.f1 (id = 4)
-				meta_tru,                         // testStruct2.f1.f2 (id = 6)
-				c2b0(5), 'a', 'b', 'c', 'd', 'e', // testStruct2.f1.F3 (id = 8)
-				0,                     // testStruct2.f1.F4 (id = 10)
-				c2b0(0),               // testStruct2.f1.f5 (id = 12)
-				typeId(nil), meta_nil, // testStruct2.f2
-				typeId(testStruct1{}), meta_aggr, // testStruct2.f3
-				0b0001_0000,        // testStruct2.f3.f1
-				meta_fls,           // testStruct2.f3.f2
-				meta_ref, c2b0(13), // testStruct2.f3.F3
-				128,               // testStruct2.f3.F4
-				meta_ref, c2b0(9), // testStruct2.f3.f5
-			},
-			nil,
-		},
-	}
-	runTests(items, reg, t)
-}*/

@@ -222,6 +222,14 @@ func (s *Serializer) traversePointer(v reflect.Value, id, parentContainerId int)
 		s.ptrs[containerId] = append(s.ptrs[containerId], id)
 		return
 	}
+	switch elem.Kind() {
+	case reflect.String, reflect.Chan, reflect.Func, reflect.Map, reflect.Slice:
+		addr = Address(elem)
+		if ref, exists := s.addresses[addr]; exists {
+			s.ptrs[ref] = append(s.ptrs[ref], id)
+			return
+		}
+	}
 	nextId := len(s.values)
 	s.ptrs[nextId] = append(s.ptrs[nextId], id)
 	s.containers[addr] = nextId

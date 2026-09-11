@@ -291,7 +291,8 @@ func (u *Unserializer) decodeChan(v reflect.Value) {
 
 func (u *Unserializer) decodeFunc(v reflect.Value) {
 	if u.readByte() == meta_nonil {
-		v.Set(u.typeRegistry.funcById(int(u.decodeCount(3))))
+		f := u.typeRegistry.funcById(int(u.decodeCount(3)))
+		v.Set(reflex.MakeExported(f))
 	}
 }
 
