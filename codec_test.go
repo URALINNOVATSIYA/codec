@@ -1903,6 +1903,24 @@ func Test_ForwardPointerToContainer(t *testing.T) {
 		// #2
 		{
 			func() any {
+				a := &[1]any{}
+				a[0] = a
+				x := &a[0]
+				return x
+			}(),
+			nil,
+			func(expected, actual any) bool {
+				if !defaultEq(expected, actual) {
+					return false
+				}
+				x := actual.(*any)
+				a := (*x).(*[1]any)
+				return a[0] == a && x == &a[0]
+			},
+		},
+		// #3
+		{
+			func() any {
 				s := &testS1Ptr{}
 				s.F1 = s
 				x := &s.F1
@@ -1918,7 +1936,7 @@ func Test_ForwardPointerToContainer(t *testing.T) {
 				return s.F1 == s && x == &s.F1
 			},
 		},
-		// #3
+		// #4
 		{
 			func() any {
 				s := &testS4{}
@@ -1937,7 +1955,7 @@ func Test_ForwardPointerToContainer(t *testing.T) {
 				return s.F1 == &s.F3 && s.F2 == &s.F3 && s.F4 == &s.F3
 			},
 		},
-		// #4
+		// #5
 		{
 			func() any {
 				s := &testS4{}
@@ -1956,7 +1974,26 @@ func Test_ForwardPointerToContainer(t *testing.T) {
 				return s.F1 == &s.F3 && s.F2 == &s.F3 && s.F4 == &s.F3 && s.F3 == &s.F1
 			},
 		},
-		// #5
+		// #6
+		{
+			func() any {
+				a := &[4]any{}
+				a[0] = &a[2]
+				a[1] = &a[2]
+				a[2] = &a[0]
+				a[3] = &a[2]
+				return a
+			}(),
+			nil,
+			func(expected, actual any) bool {
+				if !defaultEq(expected, actual) {
+					return false
+				}
+				a := (actual).(*[4]any)
+				return a[0] == &a[2] && a[1] == &a[2] && a[3] == &a[2] && a[2] == &a[0]
+			},
+		},
+		// #6
 		{
 			func() any {
 				s := &testS2{}
@@ -1973,7 +2010,24 @@ func Test_ForwardPointerToContainer(t *testing.T) {
 				return *s.F1.(*any) == s.F2 && *s.F2.(*any) == s.F1
 			},
 		},
-		// #6
+		// #7
+		{
+			func() any {
+				a := &[2]any{}
+				a[0] = &a[1]
+				a[1] = &a[0]
+				return a
+			}(),
+			nil,
+			func(expected, actual any) bool {
+				if !defaultEq(expected, actual) {
+					return false
+				}
+				a := actual.(*[2]any)
+				return *a[0].(*any) == a[1] && *a[1].(*any) == a[0]
+			},
+		},
+		// #8
 		{
 			func() any {
 				s := &testS2{}
@@ -1992,7 +2046,26 @@ func Test_ForwardPointerToContainer(t *testing.T) {
 				return **s.F1.(**any) == s.F2 && **s.F2.(**any) == s.F1
 			},
 		},
-		// #7
+		// #9
+		{
+			func() any {
+				a := &[2]any{}
+				x := &a[1]
+				y := &a[0]
+				a[0] = &x
+				a[1] = &y
+				return a
+			}(),
+			nil,
+			func(expected, actual any) bool {
+				if !defaultEq(expected, actual) {
+					return false
+				}
+				a := actual.(*[2]any)
+				return **a[0].(**any) == a[1] && **a[1].(**any) == a[0]
+			},
+		},
+		// #10
 		{
 			func() any {
 				s := &testS3{}
@@ -2011,7 +2084,7 @@ func Test_ForwardPointerToContainer(t *testing.T) {
 				return **s.F1.(**any) == s.F3 && **s.F2.(**any) == s.F3 && s.F3 == 123
 			},
 		},
-		// #8
+		// #11
 		{
 			func() any {
 				s := &testS3{}
