@@ -66,12 +66,17 @@ type (
 	testS1Ptr struct {
 		F1 *testS1Ptr
 	}
-	testStruct1 struct {
-		f1 int    `codec:"index=2"`
-		f2 bool   `codec:"index=1,removed"`
-		F3 string `codec:"index=5"`
-		F4 byte   `codec:"index=4"`
-		f5 string `codec:"index=3"`
+	testNestedS1 struct {
+		f1 testS1
+		f2 testS1Ptr
+		testS2
+	}
+	testS1Tags struct {
+		f1 int    `codec:"id=2"`
+		f2 bool   `codec:"id=4"`
+		F3 string `codec:"id=3"`
+		F4 byte
+		f5 string `codec:"id=1"`
 	}
 )
 

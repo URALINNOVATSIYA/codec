@@ -18,6 +18,7 @@ const (
 	meta_nil   byte = 0b0001_0000 // determines whether underlying value is nil
 	meta_nonil byte = 0b0010_0000 // determines whether underlying value is not nil
 	meta_strc  byte = 0b0100_0000 // mark of structs
+	meta_tags  byte = 0b0000_0001 // mark of structs that has codec tags
 )
 
 type Serializer struct {
@@ -199,7 +200,19 @@ func (s *Serializer) traverseArray(v reflect.Value, id int) {
 }
 
 func (s *Serializer) traverseStruct(v reflect.Value, id int) {
-	for _, field := range v.Fields() {
+	tags := s.typeRegistry.tagsByValue(v)
+	if len(tags) == 0 {
+		for _, field := range v.Fields() {
+			if containerId, proceed := s.addContainer(field, id); proceed {
+				s.traverse(field, containerId, containerId)
+			}
+		}
+		return
+	}
+	for sf, field := range v.Fields() {
+		if tag, exists := tags[sf.Index[0]]; !exists || tag.Deprecated {
+			continue
+		}
 		if containerId, proceed := s.addContainer(field, id); proceed {
 			s.traverse(field, containerId, containerId)
 		}
@@ -314,7 +327,7 @@ func (s *Serializer) encodeValue(id int) []byte {
 	case reflect.Map:
 		return s.encodeMap(v, id)
 	case reflect.Struct:
-		return s.encodeStruct(id)
+		return s.encodeStruct(v, id)
 	case reflect.Interface:
 		return s.encodeInterface(id)
 	case reflect.Pointer:
@@ -476,10 +489,21 @@ func (s *Serializer) encodeMap(v reflect.Value, id int) []byte {
 	return b
 }
 
-func (s *Serializer) encodeStruct(id int) []byte {
+func (s *Serializer) encodeStruct(v reflect.Value, id int) []byte {
 	b := []byte{meta_strc}
-	for _, containerId := range s.childs[id] {
+	tags := s.typeRegistry.tagsByValue(v)
+	if len(tags) == 0 {
+		for _, containerId := range s.childs[id] {
+			s.addMapping(containerId)
+			b = append(b, s.encodeValue(s.childs[containerId][0])...)
+		}
+		return b
+	}
+	b[0] |= meta_tags
+	b = append(b, c2b(len(tags))...)
+	for i, containerId := range s.childs[id] {
 		s.addMapping(containerId)
+		b = append(b, c2b(tags[i].Id)...)
 		b = append(b, s.encodeValue(s.childs[containerId][0])...)
 	}
 	return b

@@ -334,8 +334,20 @@ func (u *Unserializer) decodeArray(t reflect.Type, v reflect.Value) {
 }
 
 func (u *Unserializer) decodeStruct(v reflect.Value) {
-	_ = u.readByte() // skip struct mark
-	for i, count := 0, v.NumField(); i < count; i++ {
+	if u.readByte()&meta_tags == 0 {
+		for i, count := 0, v.NumField(); i < count; i++ {
+			field := v.Field(i)
+			u.decodeContainer(field.Type(), field)
+		}
+		return
+	}
+	fieldCount := v.NumField()
+	tags := u.typeRegistry.tagsByValue(v)
+	for range u.decodeLength() {
+		i := tags.IndexById(u.decodeId())
+		if i < 0 || i >= fieldCount {
+			continue
+		}
 		field := v.Field(i)
 		u.decodeContainer(field.Type(), field)
 	}

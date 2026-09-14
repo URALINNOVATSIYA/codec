@@ -13,6 +13,7 @@ type TypeRegistry struct {
 	typeAutoReg bool
 	types       map[int]reflect.Type  // registered types
 	funcs       map[int]reflect.Value // registered functions
+	tags        map[int]TagMap        // codec struct tags
 	ids         map[string]int        // type or func full names and their ids
 	mx          sync.RWMutex
 }
@@ -75,6 +76,9 @@ func (r *TypeRegistry) RegisterTypeOf(v any) {
 
 func (r *TypeRegistry) RegisterTypeRec(t reflect.Type) {
 	r.RegisterType(t)
+	if t == nil {
+		return
+	}
 	switch t.Kind() {
 	case reflect.Map:
 		r.RegisterTypeRec(t.Key())
@@ -100,7 +104,16 @@ func (r *TypeRegistry) RegisterType(t reflect.Type) {
 	if _, exists := r.typeIdByName(name); exists {
 		return
 	}
-	r.bindTypeWithName(t, name)
+	id := r.bindTypeWithName(t, name)
+	tags, err := ParseTags(t)
+	if err != nil {
+		panic(err)
+	}
+	if len(tags) > 0 {
+		r.mx.Lock()
+		r.tags[id] = tags
+		r.mx.Unlock()
+	}
 }
 
 func (r *TypeRegistry) RegisterFunc(f any) {
@@ -133,6 +146,14 @@ func (r *TypeRegistry) funcById(id int) reflect.Value {
 		panic(fmt.Errorf("unrecognized func [id: %d]", id))
 	}
 	return f
+}
+
+func (r *TypeRegistry) tagsByValue(v reflect.Value) TagMap {
+	id := r.typeIdByValue(v)
+	r.mx.RLock()
+	tags := r.tags[id]
+	r.mx.RUnlock()
+	return tags
 }
 
 func (r *TypeRegistry) typeIdByValue(v reflect.Value) int {

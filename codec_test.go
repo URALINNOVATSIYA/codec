@@ -1660,6 +1660,35 @@ func Test_Struct(t *testing.T) {
 				return (*s.F3.(*map[any]bool))[1]
 			},
 		},
+		// #6
+		{
+			func() any {
+				s := &testNestedS1{
+					testS1{
+						F1: 100,
+					},
+					testS1Ptr{},
+					testS2{
+						F1: 123,
+						F2: true,
+					},
+				}
+				return s
+			}(),
+			nil,
+			nil,
+		},
+		// #7
+		{
+			testS1Tags{
+				f1: 123,
+				f2: true,
+				F3: "abc",
+				f5: "abc",
+			},
+			nil,
+			nil,
+		},
 	}
 	runTests(items, reg, t)
 }
