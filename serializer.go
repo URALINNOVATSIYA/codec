@@ -19,13 +19,17 @@ const (
 	meta_nonil byte = 0b0010_0000 // determines whether underlying value is not nil
 	meta_strc  byte = 0b0100_0000 // mark of structs
 	meta_tags  byte = 0b0000_0001 // mark of structs that has codec tags
+	meta_slice byte = 0b1000_0000 // mark of structs
+	meta_sexp  byte = 0b0000_0001 // mark of a slice that created as a slice expression
 )
 
 type Serializer struct {
 	typeRegistry *TypeRegistry
 	values       []reflect.Value
-	containers   map[Addr]int
-	addresses    map[Addr]int
+	slices       *reflex.SliceMap
+	containers   map[reflex.Addr]int
+	addresses    map[reflex.Addr]int
+	ptrValues    map[reflex.Addr]int
 	parents      map[int]int
 	childs       map[int][]int
 	ptrs         map[int][]int
@@ -36,8 +40,10 @@ type Serializer struct {
 func NewSerializer() *Serializer {
 	return &Serializer{
 		typeRegistry: GetDefaultTypeRegistry(),
-		containers:   make(map[Addr]int),
-		addresses:    make(map[Addr]int),
+		slices:       reflex.NewSliceMap(),
+		containers:   make(map[reflex.Addr]int),
+		addresses:    make(map[reflex.Addr]int),
+		ptrValues:    make(map[reflex.Addr]int),
 		parents:      make(map[int]int),
 		childs:       make(map[int][]int),
 		ptrs:         make(map[int][]int),
@@ -64,8 +70,10 @@ func (s *Serializer) WithTypeRegistry(registry *TypeRegistry) *Serializer {
 func (s *Serializer) clear() {
 	s.idx = 0
 	s.values = nil
+	//s.slices.Clear()
 	clear(s.containers)
 	clear(s.addresses)
+	clear(s.ptrValues)
 	clear(s.parents)
 	clear(s.childs)
 	clear(s.ptrs)
@@ -96,13 +104,18 @@ func (s *Serializer) addNode(parentId int, v reflect.Value) int {
 }
 
 func (s *Serializer) addContainer(v reflect.Value, parentId int) (int, bool) {
-	addr := Addr{
-		reflex.PtrOf(v),
-		v.Type(),
+	addr := reflex.Addr{
+		Ptr:  reflex.PtrOf(v),
+		Type: v.Type(),
 	}
-	containerId := s.addNode(parentId, v)
-	id, exists := s.containers[addr]
+	containerId, exists := s.containers[addr]
+	if exists {
+		return containerId, false
+	}
+	containerId = s.addNode(parentId, v)
 	s.containers[addr] = containerId
+	id, exists := s.ptrValues[addr]
+	s.ptrValues[addr] = containerId
 	if !exists {
 		return containerId, true
 	}
@@ -128,7 +141,7 @@ func (s *Serializer) addContainer(v reflect.Value, parentId int) (int, bool) {
 }
 
 func (s *Serializer) addReference(v reflect.Value, id int) int {
-	addr := Address(v)
+	addr := reflex.Address(v)
 	if !addr.IsValid() {
 		return -1
 	}
@@ -147,23 +160,19 @@ func (s *Serializer) traverse(v reflect.Value, parentId, parentContainerId int) 
 	case reflect.Func:
 		fallthrough
 	case reflect.String:
-		if s.addReference(v, id) >= 0 {
-			return
-		}
+		s.addReference(v, id)
 	case reflect.Slice:
-		if s.addReference(v, id) >= 0 {
-			return
+		if s.slices.Add(v, id) {
+			s.traverseList(v, id)
 		}
-		s.traverseList(v, id)
 	case reflect.Map:
-		if s.addReference(v, id) >= 0 {
-			return
+		if s.addReference(v, id) < 0 {
+			s.traverseMap(v, id)
 		}
-		s.traverseMap(v, id)
 	case reflect.Interface:
 		s.traverseInterface(v, id, parentContainerId)
 	case reflect.Array:
-		s.traverseArray(v, id)
+		s.traverseList(v, id)
 	case reflect.Struct:
 		s.traverseStruct(v, id)
 	case reflect.Pointer:
@@ -172,7 +181,12 @@ func (s *Serializer) traverse(v reflect.Value, parentId, parentContainerId int) 
 }
 
 func (s *Serializer) traverseList(v reflect.Value, id int) {
-	// todo
+	for i := range v.Len() {
+		elem := v.Index(i)
+		if containerId, proceed := s.addContainer(elem, id); proceed {
+			s.traverse(elem, containerId, containerId)
+		}
+	}
 }
 
 func (s *Serializer) traverseMap(v reflect.Value, id int) {
@@ -188,15 +202,6 @@ func (s *Serializer) traverseInterface(v reflect.Value, id, parentContainerId in
 		parentContainerId = id
 	}
 	s.traverse(v.Elem(), id, parentContainerId)
-}
-
-func (s *Serializer) traverseArray(v reflect.Value, id int) {
-	for i := range v.Len() {
-		elem := v.Index(i)
-		if containerId, proceed := s.addContainer(elem, id); proceed {
-			s.traverse(elem, containerId, containerId)
-		}
-	}
 }
 
 func (s *Serializer) traverseStruct(v reflect.Value, id int) {
@@ -224,20 +229,20 @@ func (s *Serializer) traversePointer(v reflect.Value, id, parentContainerId int)
 		return
 	}
 	elem := v.Elem()
-	addr := Addr{
+	addr := reflex.Addr{
 		Ptr:  reflex.DirPtrOf(v),
 		Type: elem.Type(),
 	}
 	if parentContainerId > 0 {
 		id = parentContainerId
 	}
-	if containerId, exists := s.containers[addr]; exists {
+	if containerId, exists := s.ptrValues[addr]; exists {
 		s.ptrs[containerId] = append(s.ptrs[containerId], id)
 		return
 	}
 	switch elem.Kind() {
 	case reflect.String, reflect.Chan, reflect.Func, reflect.Map, reflect.Slice:
-		addr = Address(elem)
+		addr = reflex.Address(elem)
 		if ref, exists := s.addresses[addr]; exists {
 			s.ptrs[ref] = append(s.ptrs[ref], id)
 			return
@@ -245,7 +250,7 @@ func (s *Serializer) traversePointer(v reflect.Value, id, parentContainerId int)
 	}
 	nextId := len(s.values)
 	s.ptrs[nextId] = append(s.ptrs[nextId], id)
-	s.containers[addr] = nextId
+	s.ptrValues[addr] = nextId
 	s.traverse(elem, -1, -1)
 }
 

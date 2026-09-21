@@ -1693,6 +1693,21 @@ func Test_Struct(t *testing.T) {
 	runTests(items, reg, t)
 }
 
+func Test_Slice(t *testing.T) {
+	reg, typeId := registry()
+	items := []testItem{
+		// #1
+		{
+			[]bool{true, false, true},
+			[]byte{
+				version, typeId([]bool{}), meta_slice, meta_nonil, c2b0(0), 
+			},
+			nil,
+		},
+	}
+	runTests(items, reg, t)
+}
+
 func Test_ReferenceToTheSameValue(t *testing.T) {
 	reg, typeId, funcId := registryWithFuncId()
 	items := []testItem{
