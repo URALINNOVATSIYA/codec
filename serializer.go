@@ -21,19 +21,28 @@ const (
 	meta_tags  byte = 0b0000_0001 // mark of structs that has codec tags
 	meta_slice byte = 0b1000_0000 // mark of structs
 	meta_sexp  byte = 0b0000_0001 // mark of a slice that created as a slice expression
+	meta_sref  byte = 0b0000_0010 // mark of a reference to slice
 )
+
+type containerKey struct {
+	elemType reflect.Type
+	ptr      uintptr
+}
 
 type Serializer struct {
 	typeRegistry *TypeRegistry
 	values       []reflect.Value
 	slices       *reflex.SliceMap
-	containers   map[reflex.Addr]int
+	containers   map[containerKey]int
 	addresses    map[reflex.Addr]int
 	ptrValues    map[reflex.Addr]int
 	parents      map[int]int
 	childs       map[int][]int
 	ptrs         map[int][]int
+	srefs        map[int]int
+	refs         map[int]int
 	imap         map[int]int
+	sliceId      int
 	idx          int
 }
 
@@ -41,12 +50,14 @@ func NewSerializer() *Serializer {
 	return &Serializer{
 		typeRegistry: GetDefaultTypeRegistry(),
 		slices:       reflex.NewSliceMap(),
-		containers:   make(map[reflex.Addr]int),
+		containers:   make(map[containerKey]int),
 		addresses:    make(map[reflex.Addr]int),
 		ptrValues:    make(map[reflex.Addr]int),
 		parents:      make(map[int]int),
 		childs:       make(map[int][]int),
 		ptrs:         make(map[int][]int),
+		refs:         make(map[int]int),
+		srefs:        make(map[int]int),
 		imap:         make(map[int]int),
 	}
 }
@@ -69,14 +80,17 @@ func (s *Serializer) WithTypeRegistry(registry *TypeRegistry) *Serializer {
 
 func (s *Serializer) clear() {
 	s.idx = 0
+	s.sliceId = 0
 	s.values = nil
-	//s.slices.Clear()
+	s.slices.Clear()
 	clear(s.containers)
 	clear(s.addresses)
 	clear(s.ptrValues)
 	clear(s.parents)
 	clear(s.childs)
 	clear(s.ptrs)
+	clear(s.refs)
+	clear(s.srefs)
 	clear(s.imap)
 }
 
@@ -88,7 +102,7 @@ func (s *Serializer) Encode(v any) []byte {
 
 func (s *Serializer) encode(v reflect.Value) []byte {
 	s.traverse(v, -1, -1)
-	clear(s.addresses)
+	s.sliceId = 0
 	b := []byte{version}
 	b = append(b, s.encodeValues()...)
 	b = append(b, s.encodePtrs()...)
@@ -103,21 +117,15 @@ func (s *Serializer) addNode(parentId int, v reflect.Value) int {
 	return id
 }
 
-func (s *Serializer) addContainer(v reflect.Value, parentId int) (int, bool) {
+func (s *Serializer) addContainer(v reflect.Value, containerId int) bool {
 	addr := reflex.Addr{
 		Ptr:  reflex.PtrOf(v),
 		Type: v.Type(),
 	}
-	containerId, exists := s.containers[addr]
-	if exists {
-		return containerId, false
-	}
-	containerId = s.addNode(parentId, v)
-	s.containers[addr] = containerId
 	id, exists := s.ptrValues[addr]
 	s.ptrValues[addr] = containerId
 	if !exists {
-		return containerId, true
+		return true
 	}
 	prevParentId := s.parents[id]
 	s.childs[prevParentId] = slices.DeleteFunc(s.childs[prevParentId], func(i int) bool {
@@ -137,7 +145,7 @@ func (s *Serializer) addContainer(v reflect.Value, parentId int) (int, bool) {
 		s.ptrs[pid] = p
 	}
 	s.ptrs[containerId] = ptrs
-	return containerId, false
+	return false
 }
 
 func (s *Serializer) addReference(v reflect.Value, id int) int {
@@ -145,11 +153,36 @@ func (s *Serializer) addReference(v reflect.Value, id int) int {
 	if !addr.IsValid() {
 		return -1
 	}
-	if id, exists := s.addresses[addr]; exists {
-		return id
+	if ref, exists := s.addresses[addr]; exists {
+		s.refs[id] = ref
+		return ref
 	}
 	s.addresses[addr] = id
 	return -1
+}
+
+func (s *Serializer) addListElem(ptr uintptr, elemType reflect.Type, containerId int) bool {
+	key := containerKey{
+		elemType: elemType,
+		ptr:      ptr,
+	}
+	ref, exists := s.containers[key]
+	if exists {
+		s.refs[containerId] = ref
+		return false
+	}
+	s.containers[key] = containerId
+	return true
+}
+
+func (s *Serializer) addSlice(v reflect.Value, id int) (*reflex.Slice, bool) {
+	slice, new := s.slices.Add(v, s.sliceId)
+	if new {
+		s.sliceId++
+		return slice, true
+	}
+	s.srefs[id] = slice.Id
+	return slice, false
 }
 
 func (s *Serializer) traverse(v reflect.Value, parentId, parentContainerId int) {
@@ -162,7 +195,7 @@ func (s *Serializer) traverse(v reflect.Value, parentId, parentContainerId int) 
 	case reflect.String:
 		s.addReference(v, id)
 	case reflect.Slice:
-		if s.slices.Add(v, id) {
+		if !v.IsNil() {
 			s.traverseList(v, id)
 		}
 	case reflect.Map:
@@ -181,11 +214,21 @@ func (s *Serializer) traverse(v reflect.Value, parentId, parentContainerId int) 
 }
 
 func (s *Serializer) traverseList(v reflect.Value, id int) {
+	slice, new := s.addSlice(v, id)
+	if !new {
+		return
+	}
+	ptr := slice.Ptr
+	elemsize := slice.ElemType.Size()
 	for i := range v.Len() {
 		elem := v.Index(i)
-		if containerId, proceed := s.addContainer(elem, id); proceed {
-			s.traverse(elem, containerId, containerId)
+		containerId := s.addNode(id, elem)
+		if s.addListElem(ptr, slice.ElemType, containerId) {
+			if proceed := s.addContainer(elem, containerId); proceed {
+				s.traverse(elem, containerId, containerId)
+			}
 		}
+		ptr += elemsize
 	}
 }
 
@@ -208,7 +251,8 @@ func (s *Serializer) traverseStruct(v reflect.Value, id int) {
 	tags := s.typeRegistry.tagsByValue(v)
 	if len(tags) == 0 {
 		for _, field := range v.Fields() {
-			if containerId, proceed := s.addContainer(field, id); proceed {
+			containerId := s.addNode(id, field)
+			if proceed := s.addContainer(field, containerId); proceed {
 				s.traverse(field, containerId, containerId)
 			}
 		}
@@ -218,7 +262,8 @@ func (s *Serializer) traverseStruct(v reflect.Value, id int) {
 		if tag, exists := tags[sf.Index[0]]; !exists || tag.Deprecated {
 			continue
 		}
-		if containerId, proceed := s.addContainer(field, id); proceed {
+		containerId := s.addNode(id, field)
+		if proceed := s.addContainer(field, containerId); proceed {
 			s.traverse(field, containerId, containerId)
 		}
 	}
@@ -328,7 +373,7 @@ func (s *Serializer) encodeValue(id int) []byte {
 	case reflect.Array:
 		return s.encodeArray(id)
 	case reflect.Slice:
-		return s.encodeSlice(v)
+		return s.encodeSlice(v, id)
 	case reflect.Map:
 		return s.encodeMap(v, id)
 	case reflect.Struct:
@@ -371,7 +416,7 @@ func (s *Serializer) encodeBool(v reflect.Value) []byte {
 }
 
 func (s *Serializer) encodeString(v reflect.Value, id int) []byte {
-	if ref := s.addReference(v, id); ref >= 0 {
+	if ref, exists := s.refs[id]; exists {
 		return s.encodeReference(ref)
 	}
 	return append(c2b(v.Len()), v.String()...)
@@ -451,7 +496,7 @@ func (s *Serializer) encodeChan(v reflect.Value, id int) []byte {
 	if v.IsNil() {
 		return s.encodeNil()
 	}
-	if ref := s.addReference(v, id); ref >= 0 {
+	if ref, exists := s.refs[id]; exists {
 		return s.encodeReference(ref)
 	}
 	return append([]byte{meta_nonil}, c2b(v.Cap())...)
@@ -461,7 +506,7 @@ func (s *Serializer) encodeFunc(v reflect.Value, id int) []byte {
 	if v.IsNil() {
 		return s.encodeNil()
 	}
-	if ref := s.addReference(v, id); ref >= 0 {
+	if ref, exists := s.refs[id]; exists {
 		return s.encodeReference(ref)
 	}
 	return append([]byte{meta_nonil}, u2bs(uint64(s.typeRegistry.funcIdByValue(v)), 3)...)
@@ -469,22 +514,86 @@ func (s *Serializer) encodeFunc(v reflect.Value, id int) []byte {
 
 func (s *Serializer) encodeArray(id int) []byte {
 	var b []byte
+	slice := s.slices.Get(s.sliceId)
+	s.sliceId++
+	ptr := slice.Ptr
+	elemSize := slice.ElemType.Size()
 	for _, containerId := range s.childs[id] {
 		s.addMapping(containerId)
-		b = append(b, s.encodeValue(s.childs[containerId][0])...)
+		if ref, exists := s.refs[containerId]; exists {
+			b = append(b, s.encodeReference(ref)...)
+		} else {
+			b = append(b, s.encodeValue(s.childs[containerId][0])...)
+		}
+		ptr += elemSize
 	}
 	return b
 }
 
-func (s *Serializer) encodeSlice(v reflect.Value) []byte {
-	return nil
+func (s *Serializer) encodeSlice(v reflect.Value, id int) []byte {
+	b := []byte{meta_slice}
+	if v.IsNil() {
+		b[0] |= meta_nil
+		return b
+	}
+	if ref, exists := s.srefs[id]; exists {
+		b = s.encodeReference(ref)
+		b[0] = meta_slice | meta_sref
+		return b
+	}
+	slice := s.slices.Get(s.sliceId)
+	s.sliceId++
+	if slice.Parent != nil {
+		return s.encodeSliceExpression(b, slice, id)
+	}
+	return s.encodeSliceElements(b, slice, id)
+}
+
+func (s *Serializer) encodeSliceElements(b []byte, slice *reflex.Slice, id int) []byte {
+	b = append(b, c2b(slice.Len())...)
+	b = append(b, c2b(slice.Cap())...)
+	ptr := slice.Ptr
+	elemSize := slice.ElemType.Size()
+	for _, containerId := range s.childs[id] {
+		s.addMapping(containerId)
+		if ref, exists := s.refs[containerId]; exists {
+			b = append(b, s.encodeReference(ref)...)
+		} else {
+			b = append(b, s.encodeValue(s.childs[containerId][0])...)
+		}
+		ptr += elemSize
+	}
+	return b
+}
+
+func (s *Serializer) encodeSliceExpression(b []byte, slice *reflex.Slice, id int) []byte {
+	b[0] |= meta_sexp
+	p := slice.Parent
+	b = append(b, i2b(p.Id)...)
+	virtualParent := p.Id < 0 && p.V.IsValid()
+	if virtualParent {
+		b = append(b, c2b(p.V.Len())...)
+		b = append(b, c2b(p.V.Cap())...)
+		p.V = reflect.Value{}
+	}
+	i, j, k := p.SliceOf(slice)
+	b = append(b, c2b(i)...)
+	b = append(b, c2b(j)...)
+	b = append(b, c2b(k)...)
+	if virtualParent {
+		return s.encodeSliceElements(b, slice, id)
+	}
+	for _, containerId := range s.childs[id] {
+		s.addMapping(containerId)
+	}
+	return b
 }
 
 func (s *Serializer) encodeMap(v reflect.Value, id int) []byte {
 	if v.IsNil() {
 		return s.encodeNil()
 	}
-	if ref := s.addReference(v, id); ref >= 0 {
+	if ref, exists := s.refs[id]; exists {
 		return s.encodeReference(ref)
 	}
 	b := append([]byte{meta_nonil}, c2b(v.Len())...)

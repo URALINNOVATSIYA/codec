@@ -149,26 +149,31 @@ func Test_Bool(t *testing.T) {
 func Test_String(t *testing.T) {
 	reg, typeId := registry()
 	items := []testItem{
+		// #1
 		{
 			"",
 			[]byte{version, typeId(""), c2b0(0)},
 			nil,
 		},
+		// #2
 		{
 			"0123456789",
 			[]byte{version, typeId(""), c2b0(10), '0', '1', '2', '3', '4', '5', '6', '7', '8', '9'},
 			nil,
 		},
+		// #3
 		{
 			strings.Repeat("a", 255),
 			append(append([]byte{version, typeId("")}, c2b(255)...), []byte(strings.Repeat("a", 255))...),
 			nil,
 		},
+		// #4
 		{
 			strings.Repeat("a", 65536),
 			append(append([]byte{version, typeId("")}, c2b(65536)...), []byte(strings.Repeat("a", 65536))...),
 			nil,
 		},
+		// #5
 		{
 			testStr("abcd"),
 			[]byte{version, typeId(testStr("")), c2b0(4), 97, 98, 99, 100},
@@ -1537,6 +1542,12 @@ func Test_Map(t *testing.T) {
 			nil,
 			nil,
 		},
+		// #11
+		{
+			[1]any{map[int]bool{1: true}},
+			nil,
+			nil,
+		},
 	}
 	runTests(items, reg, t)
 }
@@ -1698,11 +1709,100 @@ func Test_Slice(t *testing.T) {
 	items := []testItem{
 		// #1
 		{
-			[]bool{true, false, true},
+			([]int)(nil),
 			[]byte{
-				version, typeId([]bool{}), meta_slice, meta_nonil, c2b0(0), 
+				version, typeId([]int{}), meta_slice | meta_nil,
 			},
 			nil,
+		},
+		// #2
+		{
+			[]bool{true, false, true},
+			[]byte{
+				version, typeId([]bool{}), meta_slice, c2b0(3), c2b0(3),
+				meta_tru, meta_fls, meta_tru,
+			},
+			nil,
+		},
+		// #3
+		{
+			func() any {
+				s := []byte{1, 2, 3, 4, 5, 6}
+				return [2][]byte{s, s[0:3:5]}
+			}(),
+			[]byte{
+				version, typeId([2][]byte{}),
+				meta_slice, c2b0(6), c2b0(6), 1, 2, 3, 4, 5, 6, // s
+				meta_slice | meta_sexp, i2b0(1), c2b0(0), c2b0(3), c2b0(5), // s[0:3:5]
+			},
+			func(expected, actual any) bool {
+				if !defaultEq(expected, actual) {
+					return false
+				}
+				a := actual.([2][]byte)
+				p := a[0]
+				s := a[1]
+				p[0] = 100
+				p[1] = 101
+				p[2] = 102
+				return s[0] == 100 && s[1] == 101 && s[2] == 102 && cap(s) == 5
+			},
+		},
+		// #4
+		{
+			func() any {
+				s := []byte{1, 2, 3, 4, 5, 6}
+				return [3][]byte{s, s[2:4], s[0:3:4]}
+			}(),
+			[]byte{
+				version, typeId([3][]byte{}),
+				meta_slice, c2b0(6), c2b0(6), 1, 2, 3, 4, 5, 6, // s
+				meta_slice | meta_sexp, i2b0(1), c2b0(2), c2b0(4), c2b0(4), // s[2:4]
+				meta_slice | meta_sexp, i2b0(1), c2b0(0), c2b0(3), c2b0(4), // s[0:3:4]
+			},
+			func(expected, actual any) bool {
+				if !defaultEq(expected, actual) {
+					return false
+				}
+				a := actual.([3][]byte)
+				p := a[0]
+				s1 := a[1]
+				s2 := a[2]
+				p[0] = 100
+				p[1] = 101
+				p[2] = 102
+				p[3] = 103
+				return s2[0] == 100 && s2[1] == 101 && s2[2] == 102 && cap(s2) == 4 &&
+					s1[0] == 102 && s1[1] == 103 && cap(s1) == 2
+			},
+		},
+		// #5
+		{
+			func() any {
+				s := []byte{1, 2, 3, 4, 5, 6}
+				return [3]any{s, s[2:4], s[0:3:4]}
+			}(),
+			[]byte{
+				version, typeId([3]any{}),
+				typeId([]byte{}), meta_slice, c2b0(6), c2b0(6), 1, 2, 3, 4, 5, 6, // s
+				typeId([]byte{}), meta_slice | meta_sexp, i2b0(1), c2b0(2), c2b0(4), c2b0(4), // s[2:4]
+				typeId([]byte{}), meta_slice | meta_sexp, i2b0(1), c2b0(0), c2b0(3), c2b0(4), // s[0:3:4]
+			},
+			func(expected, actual any) bool {
+				if !defaultEq(expected, actual) {
+					return false
+				}
+				a := actual.([3]any)
+				p := a[0].([]byte)
+				s1 := a[1].([]byte)
+				s2 := a[2].([]byte)
+				p[0] = 100
+				p[1] = 101
+				p[2] = 102
+				p[3] = 103
+				return s2[0] == 100 && s2[1] == 101 && s2[2] == 102 && cap(s2) == 4 &&
+					s1[0] == 102 && s1[1] == 103 && cap(s1) == 2
+			},
 		},
 	}
 	runTests(items, reg, t)

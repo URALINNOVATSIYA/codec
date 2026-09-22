@@ -11,19 +11,32 @@ import (
 	"github.com/URALINNOVATSIYA/reflex"
 )
 
+type sliceExp struct {
+	v reflect.Value
+	i int
+	j int
+	k int
+}
+
 type Unserializer struct {
 	typeRegistry *TypeRegistry
 	id           int
 	pos          int
 	size         int
+	sliceId      int
 	data         []byte
 	values       []reflect.Value
+	sparents     map[int]reflect.Value
+	slices       map[int][]sliceExp
 	maps         map[int][]int
 }
 
 func NewUnserializer() *Unserializer {
 	return &Unserializer{
 		typeRegistry: GetDefaultTypeRegistry(),
+		sparents:     make(map[int]reflect.Value),
+		slices:       make(map[int][]sliceExp),
+		maps:         make(map[int][]int),
 	}
 }
 
@@ -46,8 +59,11 @@ func (u *Unserializer) WithTypeRegistry(registry *TypeRegistry) *Unserializer {
 func (u *Unserializer) clear() {
 	u.id = 0
 	u.pos = 1 // skip version for now
+	u.sliceId = 0
 	u.values = nil
-	u.maps = make(map[int][]int)
+	clear(u.sparents)
+	clear(u.slices)
+	clear(u.maps)
 }
 
 func (u *Unserializer) Decode(data []byte) (value any, err error) {
@@ -72,6 +88,7 @@ func (u *Unserializer) decode() reflect.Value {
 	for u.topIsNotRef() {
 		u.decodeNode()
 	}
+	u.restoreSlices()
 	u.restorePointers()
 	u.restoreMaps()
 	return u.values[0]
@@ -156,7 +173,7 @@ func (u *Unserializer) decodeValue(t reflect.Type, v reflect.Value) reflect.Valu
 		case reflect.Array:
 			u.decodeArray(t, v)
 		case reflect.Slice:
-			u.decodeList(v)
+			u.decodeSlice(t, v)
 		case reflect.Map:
 			u.decodeMap(t, v)
 		case reflect.Struct:
@@ -321,11 +338,56 @@ func (u *Unserializer) decodeMap(t reflect.Type, v reflect.Value) {
 	}
 }
 
-func (u *Unserializer) decodeList(v reflect.Value) {
+func (u *Unserializer) decodeSlice(t reflect.Type, v reflect.Value) {
+	top := u.readByte()
+	if top == meta_slice|meta_sref {
+		v.Set(u.values[u.decodeId()])
+		return
+	}
+	if top&meta_nil != 0 {
+		return
+	}
+	if top&meta_sexp != 0 {
+		u.decodeSliceExpression(t, v)
+		return
+	}
+	len := u.decodeLength()
+	cap := u.decodeLength()
+	v.Set(reflect.MakeSlice(t, len, cap))
+	u.sparents[u.sliceId] = v
+	u.sliceId++
+	elemType := t.Elem()
+	for i := range len {
+		elem := v.Index(i)
+		u.decodeContainer(elemType, elem)
+	}
+}
 
+func (u *Unserializer) decodeSliceExpression(t reflect.Type, v reflect.Value) reflect.Value {
+	parentId := int(u2i(u.decodeCount(4)))
+	_, exists := u.sparents[parentId]
+	if !exists {
+
+	}
+	i := u.decodeLength()
+	j := u.decodeLength()
+	k := u.decodeLength()
+	prev := u.values[len(u.values)-2]
+	if prev.Kind() == reflect.Interface {
+		v = prev
+	}
+	u.slices[parentId] = append(u.slices[parentId], sliceExp{
+		v: v,
+		i: i,
+		j: j,
+		k: k,
+	})
+	return v
 }
 
 func (u *Unserializer) decodeArray(t reflect.Type, v reflect.Value) {
+	u.sparents[u.sliceId] = v
+	u.sliceId++
 	elemType := t.Elem()
 	for i := range t.Len() {
 		elem := v.Index(i)
@@ -390,6 +452,15 @@ func (u *Unserializer) decodeCount(sizeBits int) uint64 {
 	}
 	u.pos += length
 	return cnt
+}
+
+func (u *Unserializer) restoreSlices() {
+	for parentId, exps := range u.slices {
+		p := u.sparents[parentId]
+		for _, exp := range exps {
+			exp.v.Set(p.Slice3(exp.i, exp.j, exp.k))
+		}
+	}
 }
 
 func (u *Unserializer) restorePointers() {
