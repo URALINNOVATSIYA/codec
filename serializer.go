@@ -21,7 +21,6 @@ const (
 	meta_tags  byte = 0b0000_0001 // mark of structs that has codec tags
 	meta_slice byte = 0b1000_0000 // mark of structs
 	meta_sexp  byte = 0b0000_0001 // mark of a slice that created as a slice expression
-	meta_sref  byte = 0b0000_0010 // mark of a reference to slice
 )
 
 type containerKey struct {
@@ -39,10 +38,8 @@ type Serializer struct {
 	parents      map[int]int
 	childs       map[int][]int
 	ptrs         map[int][]int
-	srefs        map[int]int
 	refs         map[int]int
 	imap         map[int]int
-	sliceId      int
 	idx          int
 }
 
@@ -57,7 +54,6 @@ func NewSerializer() *Serializer {
 		childs:       make(map[int][]int),
 		ptrs:         make(map[int][]int),
 		refs:         make(map[int]int),
-		srefs:        make(map[int]int),
 		imap:         make(map[int]int),
 	}
 }
@@ -80,7 +76,6 @@ func (s *Serializer) WithTypeRegistry(registry *TypeRegistry) *Serializer {
 
 func (s *Serializer) clear() {
 	s.idx = 0
-	s.sliceId = 0
 	s.values = nil
 	s.slices.Clear()
 	clear(s.containers)
@@ -90,7 +85,6 @@ func (s *Serializer) clear() {
 	clear(s.childs)
 	clear(s.ptrs)
 	clear(s.refs)
-	clear(s.srefs)
 	clear(s.imap)
 }
 
@@ -102,7 +96,7 @@ func (s *Serializer) Encode(v any) []byte {
 
 func (s *Serializer) encode(v reflect.Value) []byte {
 	s.traverse(v, -1, -1)
-	s.sliceId = 0
+	s.traverseSlices()
 	b := []byte{version}
 	b = append(b, s.encodeValues()...)
 	b = append(b, s.encodePtrs()...)
@@ -176,12 +170,11 @@ func (s *Serializer) addListElem(ptr uintptr, elemType reflect.Type, containerId
 }
 
 func (s *Serializer) addSlice(v reflect.Value, id int) (*reflex.Slice, bool) {
-	slice, new := s.slices.Add(v, s.sliceId)
+	slice, new := s.slices.Add(v, id)
 	if new {
-		s.sliceId++
 		return slice, true
 	}
-	s.srefs[id] = slice.Id
+	s.refs[id] = slice.Id
 	return slice, false
 }
 
@@ -297,6 +290,29 @@ func (s *Serializer) traversePointer(v reflect.Value, id, parentContainerId int)
 	s.ptrs[nextId] = append(s.ptrs[nextId], id)
 	s.ptrValues[addr] = nextId
 	s.traverse(elem, -1, -1)
+}
+
+func (s *Serializer) traverseSlices() {
+	for _, p := range s.slices.Parents() {
+		pchilds := s.childs[p.Id]
+		elemSize := p.ElemType.Size()
+		for _, child := range p.Childs {
+			i := int(child.Ptr-p.Ptr) / int(elemSize)
+			for j, containerId := range s.childs[child.Id] {
+				delete(s.parents, containerId)
+				if _, exists := s.refs[containerId]; exists {
+					delete(s.refs, containerId)
+					continue
+				}
+				pid := pchilds[i+j]
+				delete(s.refs, pid)
+				delete(s.parents, pid)
+				pchilds[i+j] = containerId
+				s.parents[containerId] = p.Id
+			}
+			delete(s.childs, child.Id)
+		}
+	}
 }
 
 func (s *Serializer) addMapping(id int) {
@@ -514,77 +530,37 @@ func (s *Serializer) encodeFunc(v reflect.Value, id int) []byte {
 
 func (s *Serializer) encodeArray(id int) []byte {
 	var b []byte
-	slice := s.slices.Get(s.sliceId)
-	s.sliceId++
-	ptr := slice.Ptr
-	elemSize := slice.ElemType.Size()
 	for _, containerId := range s.childs[id] {
 		s.addMapping(containerId)
-		if ref, exists := s.refs[containerId]; exists {
-			b = append(b, s.encodeReference(ref)...)
-		} else {
-			b = append(b, s.encodeValue(s.childs[containerId][0])...)
-		}
-		ptr += elemSize
+		b = append(b, s.encodeValue(s.childs[containerId][0])...)
 	}
 	return b
 }
 
 func (s *Serializer) encodeSlice(v reflect.Value, id int) []byte {
-	b := []byte{meta_slice}
 	if v.IsNil() {
-		b[0] |= meta_nil
-		return b
+		return []byte{meta_slice | meta_nil}
 	}
-	if ref, exists := s.srefs[id]; exists {
-		b = s.encodeReference(ref)
-		b[0] = meta_slice | meta_sref
-		return b
+	if ref, exists := s.refs[id]; exists {
+		return s.encodeReference(ref)
 	}
-	slice := s.slices.Get(s.sliceId)
-	s.sliceId++
+	b := []byte{meta_slice}
+	slice := s.slices.Get(id)
 	if slice.Parent != nil {
-		return s.encodeSliceExpression(b, slice, id)
+		b[0] |= meta_sexp
+		p := slice.Parent
+		b = append(b, i2b(p.Id)...)
+		i, j, k := p.SliceOf(slice)
+		b = append(b, c2b(i)...)
+		b = append(b, c2b(j)...)
+		b = append(b, c2b(k)...)
+		return b
 	}
-	return s.encodeSliceElements(b, slice, id)
-}
-
-func (s *Serializer) encodeSliceElements(b []byte, slice *reflex.Slice, id int) []byte {
 	b = append(b, c2b(slice.Len())...)
 	b = append(b, c2b(slice.Cap())...)
-	ptr := slice.Ptr
-	elemSize := slice.ElemType.Size()
 	for _, containerId := range s.childs[id] {
 		s.addMapping(containerId)
-		if ref, exists := s.refs[containerId]; exists {
-			b = append(b, s.encodeReference(ref)...)
-		} else {
-			b = append(b, s.encodeValue(s.childs[containerId][0])...)
-		}
-		ptr += elemSize
-	}
-	return b
-}
-
-func (s *Serializer) encodeSliceExpression(b []byte, slice *reflex.Slice, id int) []byte {
-	b[0] |= meta_sexp
-	p := slice.Parent
-	b = append(b, i2b(p.Id)...)
-	virtualParent := p.Id < 0 && p.V.IsValid()
-	if virtualParent {
-		b = append(b, c2b(p.V.Len())...)
-		b = append(b, c2b(p.V.Cap())...)
-		p.V = reflect.Value{}
-	}
-	i, j, k := p.SliceOf(slice)
-	b = append(b, c2b(i)...)
-	b = append(b, c2b(j)...)
-	b = append(b, c2b(k)...)
-	if virtualParent {
-		return s.encodeSliceElements(b, slice, id)
-	}
-	for _, containerId := range s.childs[id] {
-		s.addMapping(containerId)
+		b = append(b, s.encodeValue(s.childs[containerId][0])...)
 	}
 	return b
 }

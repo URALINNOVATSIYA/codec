@@ -12,10 +12,10 @@ import (
 )
 
 type sliceExp struct {
-	v reflect.Value
-	i int
-	j int
-	k int
+	id int
+	i  int
+	j  int
+	k  int
 }
 
 type Unserializer struct {
@@ -23,10 +23,8 @@ type Unserializer struct {
 	id           int
 	pos          int
 	size         int
-	sliceId      int
 	data         []byte
 	values       []reflect.Value
-	sparents     map[int]reflect.Value
 	slices       map[int][]sliceExp
 	maps         map[int][]int
 }
@@ -34,7 +32,6 @@ type Unserializer struct {
 func NewUnserializer() *Unserializer {
 	return &Unserializer{
 		typeRegistry: GetDefaultTypeRegistry(),
-		sparents:     make(map[int]reflect.Value),
 		slices:       make(map[int][]sliceExp),
 		maps:         make(map[int][]int),
 	}
@@ -59,9 +56,7 @@ func (u *Unserializer) WithTypeRegistry(registry *TypeRegistry) *Unserializer {
 func (u *Unserializer) clear() {
 	u.id = 0
 	u.pos = 1 // skip version for now
-	u.sliceId = 0
 	u.values = nil
-	clear(u.sparents)
 	clear(u.slices)
 	clear(u.maps)
 }
@@ -340,54 +335,33 @@ func (u *Unserializer) decodeMap(t reflect.Type, v reflect.Value) {
 
 func (u *Unserializer) decodeSlice(t reflect.Type, v reflect.Value) {
 	top := u.readByte()
-	if top == meta_slice|meta_sref {
-		v.Set(u.values[u.decodeId()])
-		return
-	}
 	if top&meta_nil != 0 {
 		return
 	}
 	if top&meta_sexp != 0 {
-		u.decodeSliceExpression(t, v)
+		parentId := int(u2i(u.decodeCount(4)))
+		i := u.decodeLength()
+		j := u.decodeLength()
+		k := u.decodeLength()
+		id := len(u.values) - 1
+		if u.values[id-1].Kind() == reflect.Interface {
+			id--
+		}
+		u.slices[parentId] = append(u.slices[parentId], sliceExp{
+			id: id,
+			i:  i,
+			j:  j,
+			k:  k,
+		})
 		return
 	}
-	len := u.decodeLength()
-	cap := u.decodeLength()
-	v.Set(reflect.MakeSlice(t, len, cap))
-	u.sparents[u.sliceId] = v
-	u.sliceId++
-	elemType := t.Elem()
-	for i := range len {
-		elem := v.Index(i)
-		u.decodeContainer(elemType, elem)
-	}
-}
-
-func (u *Unserializer) decodeSliceExpression(t reflect.Type, v reflect.Value) reflect.Value {
-	parentId := int(u2i(u.decodeCount(4)))
-	_, exists := u.sparents[parentId]
-	if !exists {
-
-	}
-	i := u.decodeLength()
-	j := u.decodeLength()
-	k := u.decodeLength()
-	prev := u.values[len(u.values)-2]
-	if prev.Kind() == reflect.Interface {
-		v = prev
-	}
-	u.slices[parentId] = append(u.slices[parentId], sliceExp{
-		v: v,
-		i: i,
-		j: j,
-		k: k,
-	})
-	return v
+	length := u.decodeLength()
+	capacity := u.decodeLength()
+	v.Set(reflect.MakeSlice(t, length, capacity))
+	u.decodeArray(t, v)
 }
 
 func (u *Unserializer) decodeArray(t reflect.Type, v reflect.Value) {
-	u.sparents[u.sliceId] = v
-	u.sliceId++
 	elemType := t.Elem()
 	for i := range t.Len() {
 		elem := v.Index(i)
@@ -431,13 +405,14 @@ func (u *Unserializer) decodePointer(t reflect.Type, v reflect.Value) {
 	v.Set(reflex.PtrAt(elemType, elemValue))
 }
 
-func (u *Unserializer) decodeContainer(containerType reflect.Type, containerValue reflect.Value) {
+func (u *Unserializer) decodeContainer(containerType reflect.Type, containerValue reflect.Value) reflect.Value {
 	containerValue = reflex.PtrAt(containerType, containerValue).Elem()
 	u.values = append(u.values, containerValue)
 	v := u.decodeValue(containerType, containerValue)
 	if v.IsValid() {
 		containerValue.Set(v)
 	}
+	return containerValue
 }
 
 func (u *Unserializer) decodeReference() reflect.Value {
@@ -456,9 +431,10 @@ func (u *Unserializer) decodeCount(sizeBits int) uint64 {
 
 func (u *Unserializer) restoreSlices() {
 	for parentId, exps := range u.slices {
-		p := u.sparents[parentId]
+		p := u.values[parentId]
 		for _, exp := range exps {
-			exp.v.Set(p.Slice3(exp.i, exp.j, exp.k))
+			s := p.Slice3(exp.i, exp.j, exp.k)
+			u.values[exp.id].Set(s)
 		}
 	}
 }
@@ -487,12 +463,16 @@ func (u *Unserializer) top() byte {
 	return u.data[u.pos]
 }
 
+func (u *Unserializer) topIsContainerRef() bool {
+	return u.pos+1 < u.size && u.data[u.pos] == meta_ref && u.data[u.pos+1] == meta_ref
+}
+
 func (u *Unserializer) topIsRef() bool {
-	return u.pos < u.size && u.top() == meta_ref
+	return u.pos < u.size && u.data[u.pos] == meta_ref
 }
 
 func (u *Unserializer) topIsNotRef() bool {
-	return u.pos < u.size && u.top() != meta_ref
+	return u.pos < u.size && u.data[u.pos] != meta_ref
 }
 
 func (u *Unserializer) readByte() byte {

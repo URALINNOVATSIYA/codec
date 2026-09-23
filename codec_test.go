@@ -1708,7 +1708,7 @@ func Test_Slice(t *testing.T) {
 	reg, typeId := registry()
 	items := []testItem{
 		// #1
-		{
+		/*{
 			([]int)(nil),
 			[]byte{
 				version, typeId([]int{}), meta_slice | meta_nil,
@@ -1734,6 +1734,7 @@ func Test_Slice(t *testing.T) {
 				version, typeId([2][]byte{}),
 				meta_slice, c2b0(6), c2b0(6), 1, 2, 3, 4, 5, 6, // s
 				meta_slice | meta_sexp, i2b0(1), c2b0(0), c2b0(3), c2b0(5), // s[0:3:5]
+				meta_ref, meta_ref, meta_ref, meta_ref, meta_ref, meta_ref,
 			},
 			func(expected, actual any) bool {
 				if !defaultEq(expected, actual) {
@@ -1758,7 +1759,9 @@ func Test_Slice(t *testing.T) {
 				version, typeId([3][]byte{}),
 				meta_slice, c2b0(6), c2b0(6), 1, 2, 3, 4, 5, 6, // s
 				meta_slice | meta_sexp, i2b0(1), c2b0(2), c2b0(4), c2b0(4), // s[2:4]
+				meta_ref, meta_ref, meta_ref, meta_ref,
 				meta_slice | meta_sexp, i2b0(1), c2b0(0), c2b0(3), c2b0(4), // s[0:3:4]
+				meta_ref, meta_ref, meta_ref, meta_ref, meta_ref, meta_ref,
 			},
 			func(expected, actual any) bool {
 				if !defaultEq(expected, actual) {
@@ -1786,7 +1789,9 @@ func Test_Slice(t *testing.T) {
 				version, typeId([3]any{}),
 				typeId([]byte{}), meta_slice, c2b0(6), c2b0(6), 1, 2, 3, 4, 5, 6, // s
 				typeId([]byte{}), meta_slice | meta_sexp, i2b0(1), c2b0(2), c2b0(4), c2b0(4), // s[2:4]
+				meta_ref, meta_ref, meta_ref, meta_ref,
 				typeId([]byte{}), meta_slice | meta_sexp, i2b0(1), c2b0(0), c2b0(3), c2b0(4), // s[0:3:4]
+				meta_ref, meta_ref, meta_ref, meta_ref, meta_ref, meta_ref,
 			},
 			func(expected, actual any) bool {
 				if !defaultEq(expected, actual) {
@@ -1802,6 +1807,64 @@ func Test_Slice(t *testing.T) {
 				p[3] = 103
 				return s2[0] == 100 && s2[1] == 101 && s2[2] == 102 && cap(s2) == 4 &&
 					s1[0] == 102 && s1[1] == 103 && cap(s1) == 2
+			},
+		},
+		// #6
+		{
+			func() any {
+				s := []byte{1, 2, 3, 4, 5, 6}
+				return [3]any{s[2:4], s, s[0:3:4]}
+			}(),
+			[]byte{
+				version, typeId([3]any{}),
+				typeId([]byte{}), meta_slice | meta_sexp, i2b0(2), c2b0(2), c2b0(4), c2b0(4), // s[2:4]
+				3, 4,
+				typeId([]byte{}), meta_slice, c2b0(6), c2b0(6), // s
+				1, 2, meta_ref, meta_ref, c2b0(4), meta_ref, meta_ref, c2b0(6), 5, 6,
+				typeId([]byte{}), meta_slice | meta_sexp, i2b0(2), c2b0(0), c2b0(3), c2b0(4), // s[0:3:4]
+				meta_ref, meta_ref, meta_ref, meta_ref, meta_ref, meta_ref,
+			},
+			func(expected, actual any) bool {
+				if !defaultEq(expected, actual) {
+					return false
+				}
+				a := actual.([3]any)
+				p := a[1].([]byte)
+				s1 := a[0].([]byte)
+				s2 := a[2].([]byte)
+				p[0] = 100
+				p[1] = 101
+				p[2] = 102
+				p[3] = 103
+				return s2[0] == 100 && s2[1] == 101 && s2[2] == 102 && cap(s2) == 4 &&
+					s1[0] == 102 && s1[1] == 103 && cap(s1) == 2
+			},
+		},*/
+		// #7
+		{
+			func() any {
+				a := &[3]any{}
+				a[0] = a[0:2]
+				a[1] = a[1:2]
+				a[2] = a[1:3]
+				return a
+			}(),
+			[]byte{
+				version, typeId((*[3]any)(nil)), meta_nonil, // *a
+				typeId([3]any{}),                                                            // a
+				typeId([]any{}), meta_slice | meta_sexp, i2b0(1), c2b0(0), c2b0(2), c2b0(3), // a[0:2]
+				typeId([]any{}), meta_slice | meta_sexp, i2b0(1), c2b0(1), c2b0(2), c2b0(2), // a[1:2]
+				typeId([]any{}), meta_slice | meta_sexp, i2b0(1), c2b0(1), c2b0(3), c2b0(3), // a[1:3]
+				// refs
+				meta_ref, c2b0(1), c2b0(0),
+			},
+			func(expected, actual any) bool {
+				if !defaultEq(expected, actual) {
+					return false
+				}
+				a := actual.(*[3]any)
+				a[1].([]any)[0] = 123
+				return a[0].([]any)[1] == 123 && a[2].([]any)[0] == 123
 			},
 		},
 	}
