@@ -1708,7 +1708,7 @@ func Test_Slice(t *testing.T) {
 	reg, typeId := registry()
 	items := []testItem{
 		// #1
-		/*{
+		{
 			([]int)(nil),
 			[]byte{
 				version, typeId([]int{}), meta_slice | meta_nil,
@@ -1733,8 +1733,7 @@ func Test_Slice(t *testing.T) {
 			[]byte{
 				version, typeId([2][]byte{}),
 				meta_slice, c2b0(6), c2b0(6), 1, 2, 3, 4, 5, 6, // s
-				meta_slice | meta_sexp, i2b0(1), c2b0(0), c2b0(3), c2b0(5), // s[0:3:5]
-				meta_ref, meta_ref, meta_ref, meta_ref, meta_ref, meta_ref,
+				meta_slice | meta_sexp, i2b0(2), c2b0(0), c2b0(3), c2b0(5), // s[0:3:5]
 			},
 			func(expected, actual any) bool {
 				if !defaultEq(expected, actual) {
@@ -1758,10 +1757,8 @@ func Test_Slice(t *testing.T) {
 			[]byte{
 				version, typeId([3][]byte{}),
 				meta_slice, c2b0(6), c2b0(6), 1, 2, 3, 4, 5, 6, // s
-				meta_slice | meta_sexp, i2b0(1), c2b0(2), c2b0(4), c2b0(4), // s[2:4]
-				meta_ref, meta_ref, meta_ref, meta_ref,
-				meta_slice | meta_sexp, i2b0(1), c2b0(0), c2b0(3), c2b0(4), // s[0:3:4]
-				meta_ref, meta_ref, meta_ref, meta_ref, meta_ref, meta_ref,
+				meta_slice | meta_sexp, i2b0(2), c2b0(2), c2b0(4), c2b0(4), // s[2:4]
+				meta_slice | meta_sexp, i2b0(2), c2b0(0), c2b0(3), c2b0(4), // s[0:3:4]
 			},
 			func(expected, actual any) bool {
 				if !defaultEq(expected, actual) {
@@ -1788,10 +1785,8 @@ func Test_Slice(t *testing.T) {
 			[]byte{
 				version, typeId([3]any{}),
 				typeId([]byte{}), meta_slice, c2b0(6), c2b0(6), 1, 2, 3, 4, 5, 6, // s
-				typeId([]byte{}), meta_slice | meta_sexp, i2b0(1), c2b0(2), c2b0(4), c2b0(4), // s[2:4]
-				meta_ref, meta_ref, meta_ref, meta_ref,
-				typeId([]byte{}), meta_slice | meta_sexp, i2b0(1), c2b0(0), c2b0(3), c2b0(4), // s[0:3:4]
-				meta_ref, meta_ref, meta_ref, meta_ref, meta_ref, meta_ref,
+				typeId([]byte{}), meta_slice | meta_sexp, i2b0(3), c2b0(2), c2b0(4), c2b0(4), // s[2:4]
+				typeId([]byte{}), meta_slice | meta_sexp, i2b0(3), c2b0(0), c2b0(3), c2b0(4), // s[0:3:4]
 			},
 			func(expected, actual any) bool {
 				if !defaultEq(expected, actual) {
@@ -1817,12 +1812,9 @@ func Test_Slice(t *testing.T) {
 			}(),
 			[]byte{
 				version, typeId([3]any{}),
-				typeId([]byte{}), meta_slice | meta_sexp, i2b0(2), c2b0(2), c2b0(4), c2b0(4), // s[2:4]
-				3, 4,
-				typeId([]byte{}), meta_slice, c2b0(6), c2b0(6), // s
-				1, 2, meta_ref, meta_ref, c2b0(4), meta_ref, meta_ref, c2b0(6), 5, 6,
-				typeId([]byte{}), meta_slice | meta_sexp, i2b0(2), c2b0(0), c2b0(3), c2b0(4), // s[0:3:4]
-				meta_ref, meta_ref, meta_ref, meta_ref, meta_ref, meta_ref,
+				typeId([]byte{}), meta_slice | meta_sexp, i2b(6)[0], c2b0(2), c2b0(4), c2b0(4), // s[2:4]
+				typeId([]byte{}), meta_slice, c2b0(6), c2b0(6), 1, 2, 3, 4, 5, 6, // s
+				typeId([]byte{}), meta_slice | meta_sexp, i2b(6)[0], c2b0(0), c2b0(3), c2b0(4), // s[0:3:4]
 			},
 			func(expected, actual any) bool {
 				if !defaultEq(expected, actual) {
@@ -1839,7 +1831,7 @@ func Test_Slice(t *testing.T) {
 				return s2[0] == 100 && s2[1] == 101 && s2[2] == 102 && cap(s2) == 4 &&
 					s1[0] == 102 && s1[1] == 103 && cap(s1) == 2
 			},
-		},*/
+		},
 		// #7
 		{
 			func() any {
@@ -1865,6 +1857,26 @@ func Test_Slice(t *testing.T) {
 				a := actual.(*[3]any)
 				a[1].([]any)[0] = 123
 				return a[0].([]any)[1] == 123 && a[2].([]any)[0] == 123
+			},
+		},
+		// #8
+		{
+			func() any {
+				s := []byte{1, 2, 3, 4, 5, 6}
+				return [3][]byte{s[4:6], s[1:3], s[0:2]}
+			}(),
+			nil,
+			func(expected, actual any) bool {
+				if !defaultEq(expected, actual) {
+					return false
+				}
+				a := actual.([3][]byte)
+				a[1][0] = 123
+				if a[2][1] != 123 {
+					return false
+				}
+				a[1] = append(a[1], 111, 222)
+				return a[0][0] == 222
 			},
 		},
 	}
@@ -1951,6 +1963,53 @@ func Test_ReferenceToTheSameValue(t *testing.T) {
 				return funcEqual(e[0], a[0]) && funcEqual(e[1], a[1]) && funcEqual(e[2], a[2]) &&
 					funcEqual(e[3], a[3]) && funcEqual(a[0], a[2]) && funcEqual(a[1], a[3])
 			},
+		},
+		// #5
+		{
+			func() any {
+				m := map[byte]int{1: 123, 2: 213, 3: 321}
+				return [3]any{m, m, m}
+			}(),
+			nil,
+			nil,
+		},
+		// #6
+		{
+			func() any {
+				s := []byte{1, 2, 3, 4, 5, 6}
+				return [4]any{s[2:4], s[2:4], s, s}
+			}(),
+			nil,
+			nil,
+		},
+		// #7
+		{
+			func() any {
+				s := []byte{1, 2, 3, 4, 5, 6}
+				return [4]any{&s, &s, s, s}
+			}(),
+			nil,
+			nil,
+		},
+		// #8
+		{
+			func() any {
+				s := []byte{1, 2, 3, 4, 5, 6}
+				s1 := s[2:4]
+				s2 := s[2:4]
+				return [4]any{&s1, &s2, s, s}
+			}(),
+			nil,
+			nil,
+		},
+		// #9
+		{
+			func() any {
+				s := "abc"
+				return [4]any{&s, &s, s, s}
+			}(),
+			nil,
+			nil,
 		},
 	}
 	runTests(items, reg, t)

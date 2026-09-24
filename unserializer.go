@@ -107,12 +107,13 @@ func (u *Unserializer) decodeNode() reflect.Value {
 }
 
 func (u *Unserializer) decodeValue(t reflect.Type, v reflect.Value) reflect.Value {
+	u.values = append(u.values, v)
 	if isSerializableType(t) {
 		if u.topIsRef() {
-			return u.decodeReference()
+			u.decodeReference(v)
+		} else {
+			u.decodeSerializable(t, v)
 		}
-		u.values = append(u.values, v)
-		u.decodeSerializable(t, v)
 		return v
 	}
 	kind := v.Kind()
@@ -155,9 +156,9 @@ func (u *Unserializer) decodeValue(t reflect.Type, v reflect.Value) reflect.Valu
 		u.decodeUnsafePointer(v)
 	default:
 		if u.topIsRef() {
-			return u.decodeReference()
+			u.decodeReference(v)
+			return v
 		}
-		u.values = append(u.values, v)
 		switch kind {
 		case reflect.String:
 			u.decodeString(v)
@@ -180,7 +181,6 @@ func (u *Unserializer) decodeValue(t reflect.Type, v reflect.Value) reflect.Valu
 		}
 		return v
 	}
-	u.values = append(u.values, v)
 	return v
 }
 
@@ -358,7 +358,11 @@ func (u *Unserializer) decodeSlice(t reflect.Type, v reflect.Value) {
 	length := u.decodeLength()
 	capacity := u.decodeLength()
 	v.Set(reflect.MakeSlice(t, length, capacity))
-	u.decodeArray(t, v)
+	elemType := t.Elem()
+	for i := range length {
+		elem := v.Index(i)
+		u.decodeContainer(elemType, elem)
+	}
 }
 
 func (u *Unserializer) decodeArray(t reflect.Type, v reflect.Value) {
@@ -415,9 +419,9 @@ func (u *Unserializer) decodeContainer(containerType reflect.Type, containerValu
 	return containerValue
 }
 
-func (u *Unserializer) decodeReference() reflect.Value {
+func (u *Unserializer) decodeReference(v reflect.Value) {
 	_ = u.readByte()
-	return u.values[u.decodeId()]
+	v.Set(u.values[u.decodeId()])
 }
 
 func (u *Unserializer) decodeCount(sizeBits int) uint64 {
@@ -457,14 +461,6 @@ func (u *Unserializer) restoreMaps() {
 			m.SetMapIndex(u.values[items[i]], u.values[items[i+1]])
 		}
 	}
-}
-
-func (u *Unserializer) top() byte {
-	return u.data[u.pos]
-}
-
-func (u *Unserializer) topIsContainerRef() bool {
-	return u.pos+1 < u.size && u.data[u.pos] == meta_ref && u.data[u.pos+1] == meta_ref
 }
 
 func (u *Unserializer) topIsRef() bool {
