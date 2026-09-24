@@ -189,18 +189,18 @@ func (s *Serializer) setReference(id, ref int) {
 	})
 	s.parents[ref] = pid
 	childs := s.childs[pid][:0]
-	foundNew := false
+	foundRef := false
 	for _, childId := range s.childs[pid] {
 		switch childId {
 		case ref:
-			if !foundNew {
+			if !foundRef {
 				childs = append(childs, childId)
-				foundNew = true
+				foundRef = true
 			}
 		case id:
-			if !foundNew {
+			if !foundRef {
 				childs = append(childs, ref)
-				foundNew = true
+				foundRef = true
 			}
 		default:
 			childs = append(childs, childId)
