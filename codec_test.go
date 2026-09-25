@@ -1897,13 +1897,60 @@ func Test_ReferenceToTheSameValue(t *testing.T) {
 			[]byte{
 				version,
 				typeId(testS3{}), meta_strc, // testS3 header
-				typeId(""), c2b0(3), 'a', 'b', 'c', // testS3.F1 (id = 1)
-				typeId(nil), meta_nil, // testS3.F2 (id = 4)
-				typeId(""), meta_ref, c2b0(3), // testS3.F3 (id = 7)
+				typeId(""), c2b0(3), 'a', 'b', 'c', // testS3.F1
+				typeId(nil), meta_nil, // testS3.F2
+				typeId(""), meta_ref, c2b0(3), // testS3.F3
 			},
 			nil,
 		},
 		// #2
+		{
+			func() any {
+				return [3]string{"abc", "abc", "abc"}
+			}(),
+			[]byte{
+				version,
+				typeId([3]string{}),
+				c2b0(3), 'a', 'b', 'c', // a[0]
+				meta_ref, c2b0(2), // a[1]
+				meta_ref, c2b0(2), // a[2]
+			},
+			nil,
+		},
+		// #3
+		{
+			func() any {
+				s := "abc"
+				return [4]any{&s, &s, s, s}
+			}(),
+			nil,
+			func(expected, actual any) bool {
+				if !defaultEq(expected, actual) {
+					return false
+				}
+				a := actual.([4]any)
+				*a[1].(*string) = "cba"
+				return *a[0].(*string) == "cba"
+			},
+		},
+		// #4
+		{
+			func() any {
+				s := "abc"
+				c := s
+				return [4]any{&s, &c, s, s}
+			}(),
+			nil,
+			func(expected, actual any) bool {
+				if !defaultEq(expected, actual) {
+					return false
+				}
+				a := actual.([4]any)
+				*a[1].(*string) = "cba"
+				return *a[0].(*string) == "abc"
+			},
+		},
+		// #5
 		{
 			func() any {
 				s := testS3{}
@@ -1924,7 +1971,54 @@ func Test_ReferenceToTheSameValue(t *testing.T) {
 				return funcEqual(e.F1, a.F1) && funcEqual(e.F2, a.F2) && a.F3 == nil
 			},
 		},
-		// #3
+		// #6
+		{
+			[4]func(int, int) int{testSum, testDiv, testSum, testDiv},
+			[]byte{
+				version,
+				typeId([4]func(int, int) int{}),
+				meta_nonil, funcId(testSum),
+				meta_nonil, funcId(testDiv),
+				meta_ref, c2b0(2),
+				meta_ref, c2b0(4),
+			},
+			func(expected, actual any) bool {
+				e := expected.([4]func(int, int) int)
+				a := actual.([4]func(int, int) int)
+				return funcEqual(e[0], a[0]) && funcEqual(e[1], a[1]) && funcEqual(e[2], a[2]) &&
+					funcEqual(e[3], a[3]) && funcEqual(a[0], a[2]) && funcEqual(a[1], a[3])
+			},
+		},
+		// #7
+		{
+			func() any {
+				f := testSum
+				return [4]any{&f, &f, f, f}
+			}(),
+			nil,
+			func(expected, actual any) bool {
+				e := expected.([4]any)
+				a := actual.([4]any)
+				*a[0].(*func(int, int) int) = testDiv
+				return funcEqual(a[0], a[1]) && funcEqual(e[2], a[2]) && funcEqual(e[3], a[3])
+			},
+		},
+		// #8
+		{
+			func() any {
+				f := testSum
+				c := f
+				return [4]any{&f, &c, f, f}
+			}(),
+			nil,
+			func(expected, actual any) bool {
+				e := expected.([4]any)
+				a := actual.([4]any)
+				*a[0].(*func(int, int) int) = testDiv
+				return funcEqual(e[1], a[1]) && funcEqual(e[2], a[2]) && funcEqual(e[3], a[3])
+			},
+		},
+		// #9
 		{
 			func() any {
 				ch := make(chan<- byte, 15)
@@ -1946,34 +2040,85 @@ func Test_ReferenceToTheSameValue(t *testing.T) {
 				return chanEqual(e.F2, a.F2) && chanEqual(e.F3, a.F3) && a.F1 == nil
 			},
 		},
-		// #4
-		{
-			[4]func(int, int) int{testSum, testDiv, testSum, testDiv},
-			[]byte{
-				version,
-				typeId([4]func(int, int) int{}),
-				meta_nonil, funcId(testSum),
-				meta_nonil, funcId(testDiv),
-				meta_ref, c2b0(2),
-				meta_ref, c2b0(4),
-			},
-			func(expected, actual any) bool {
-				e := expected.([4]func(int, int) int)
-				a := actual.([4]func(int, int) int)
-				return funcEqual(e[0], a[0]) && funcEqual(e[1], a[1]) && funcEqual(e[2], a[2]) &&
-					funcEqual(e[3], a[3]) && funcEqual(a[0], a[2]) && funcEqual(a[1], a[3])
-			},
-		},
-		// #5
+		// #10
 		{
 			func() any {
-				m := map[byte]int{1: 123, 2: 213, 3: 321}
-				return [3]any{m, m, m}
+				ch := make(chan<- byte, 15)
+				return [4]any{&ch, &ch, ch, ch}
 			}(),
 			nil,
+			func(expected, actual any) bool {
+				e := expected.([4]any)
+				a := actual.([4]any)
+				*a[0].(*chan<- byte) = make(chan<- byte, 5)
+				return chanEqual(*a[0].(*chan<- byte), *a[1].(*chan<- byte)) &&
+					chanEqual(e[2], a[2]) && chanEqual(e[3], a[3])
+			},
+		},
+		// #11
+		{
+			func() any {
+				ch := make(chan<- byte, 15)
+				c := ch
+				return [4]any{&ch, &c, ch, ch}
+			}(),
+			nil,
+			func(expected, actual any) bool {
+				e := expected.([4]any)
+				a := actual.([4]any)
+				*a[0].(*chan<- byte) = make(chan<- byte, 5)
+				return chanEqual(*e[1].(*chan<- byte), *a[1].(*chan<- byte)) &&
+					chanEqual(e[2], a[2]) && chanEqual(e[3], a[3])
+			},
+		},
+		// #12
+		{
+			func() any {
+				m := map[byte]byte{1: 100}
+				return [3]any{m, m, m}
+			}(),
+			[]byte{
+				version, typeId([3]any{}),
+				typeId(map[byte]byte{}), meta_nonil, c2b0(1), 1, 100, // a[0]
+				typeId(map[byte]byte{}), meta_ref, c2b0(3), // a[1]
+				typeId(map[byte]byte{}), meta_ref, c2b0(3), // a[2]
+			},
 			nil,
 		},
-		// #6
+		// #13
+		{
+			func() any {
+				m := map[byte]byte{1: 100}
+				return [4]any{&m, &m, m, m}
+			}(),
+			nil,
+			func(expected, actual any) bool {
+				if !defaultEq(expected, actual) {
+					return false
+				}
+				a := actual.([4]any)
+				*a[0].(*map[byte]byte) = map[byte]byte{1: 200}
+				return reflect.DeepEqual(a[0], a[1])
+			},
+		},
+		// #14
+		{
+			func() any {
+				m := map[byte]byte{1: 1}
+				c := m
+				return [4]any{&m, &c, m, m}
+			}(),
+			nil,
+			func(expected, actual any) bool {
+				if !defaultEq(expected, actual) {
+					return false
+				}
+				a := actual.([4]any)
+				*a[1].(*map[byte]byte) = map[byte]byte{2: 2}
+				return reflect.DeepEqual(*a[0].(*map[byte]byte), a[3])
+			},
+		},
+		// #15
 		{
 			func() any {
 				s := []byte{1, 2, 3, 4, 5, 6}
@@ -1982,16 +2127,40 @@ func Test_ReferenceToTheSameValue(t *testing.T) {
 			nil,
 			nil,
 		},
-		// #7
+		// #16
 		{
 			func() any {
 				s := []byte{1, 2, 3, 4, 5, 6}
 				return [4]any{&s, &s, s, s}
 			}(),
 			nil,
-			nil,
+			func(expected, actual any) bool {
+				if !defaultEq(expected, actual) {
+					return false
+				}
+				a := actual.([4]any)
+				*a[1].(*[]byte) = []byte{0}
+				return reflect.DeepEqual(a[0], a[1])
+			},
 		},
-		// #8
+		// #17
+		{
+			func() any {
+				s := []byte{1, 2, 3, 4, 5, 6}
+				c := s
+				return [4]any{&s, &c, s, s}
+			}(),
+			nil,
+			func(expected, actual any) bool {
+				if !defaultEq(expected, actual) {
+					return false
+				}
+				a := actual.([4]any)
+				*a[1].(*[]byte) = []byte{0}
+				return reflect.DeepEqual(*a[0].(*[]byte), a[3])
+			},
+		},
+		// #18
 		{
 			func() any {
 				s := []byte{1, 2, 3, 4, 5, 6}
@@ -2000,16 +2169,14 @@ func Test_ReferenceToTheSameValue(t *testing.T) {
 				return [4]any{&s1, &s2, s, s}
 			}(),
 			nil,
-			nil,
-		},
-		// #9
-		{
-			func() any {
-				s := "abc"
-				return [4]any{&s, &s, s, s}
-			}(),
-			nil,
-			nil,
+			func(expected, actual any) bool {
+				if !defaultEq(expected, actual) {
+					return false
+				}
+				a := actual.([4]any)
+				*a[1].(*[]byte) = []byte{0}
+				return reflect.DeepEqual(*a[0].(*[]byte), a[3].([]byte)[2:4])
+			},
 		},
 	}
 	runTests(items, reg, t)

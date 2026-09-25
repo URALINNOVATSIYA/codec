@@ -173,12 +173,15 @@ func (s *Serializer) addSlice(v reflect.Value, id int) (*reflex.Slice, bool) {
 	if new {
 		return slice, true
 	}
+	if id == slice.Id {
+		return slice, true
+	}
 	s.setReference(id, slice.Id)
 	return slice, false
 }
 
 func (s *Serializer) setReference(id, ref int) {
-	if s.parents[ref] != -1 {
+	if s.parents[ref] != -1 || s.parents[id] == -1 {
 		s.refs[id] = ref
 		return
 	}
@@ -207,9 +210,6 @@ func (s *Serializer) setReference(id, ref int) {
 		}
 	}
 	s.childs[pid] = childs
-	oldPtrs := s.ptrs[id]
-	delete(s.ptrs, id)
-	s.ptrs[ref] = append(s.ptrs[ref], oldPtrs...)
 }
 
 func (s *Serializer) visit(v reflect.Value, parentId, parentContainerId int) {
@@ -302,23 +302,15 @@ func (s *Serializer) visitPointer(v reflect.Value, id, parentContainerId int) {
 	}
 	elem := v.Elem()
 	addr := reflex.Addr{
-		Ptr:  reflex.DirPtrOf(v),
+		Ptr:  reflex.PtrOf(elem),
 		Type: elem.Type(),
 	}
 	if parentContainerId > 0 {
 		id = parentContainerId
 	}
-	if containerId, exists := s.ptrValues[addr]; exists {
-		s.ptrs[containerId] = append(s.ptrs[containerId], id)
+	if ref, exists := s.ptrValues[addr]; exists {
+		s.ptrs[ref] = append(s.ptrs[ref], id)
 		return
-	}
-	switch elem.Kind() {
-	case reflect.String, reflect.Chan, reflect.Func, reflect.Map, reflect.Slice:
-		addr = reflex.Address(elem)
-		if ref, exists := s.addresses[addr]; exists {
-			s.ptrs[ref] = append(s.ptrs[ref], id)
-			return
-		}
 	}
 	nextId := len(s.values)
 	s.ptrs[nextId] = append(s.ptrs[nextId], id)
@@ -328,13 +320,10 @@ func (s *Serializer) visitPointer(v reflect.Value, id, parentContainerId int) {
 
 func (s *Serializer) visitSlices() {
 	for _, p := range s.slices.Parents() {
-		parentId := p.Id
-		if parentId < 0 {
-			parentId = len(s.values)
+		if p.Id < 0 {
 			s.visit(p.V, -1, -1)
-			p.Id = parentId
 		}
-		pchilds := s.childs[parentId]
+		pchilds := s.childs[p.Id]
 		elemSize := p.ElemType.Size()
 		for _, child := range p.Childs {
 			i := int(child.Ptr-p.Ptr) / int(elemSize)
