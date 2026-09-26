@@ -294,3 +294,4 @@ pointer-restoration phase. The stream ends after the last pointer-link record.
 - `uintptr` has the same address-portability limitation.
 - Channel state and buffered elements are not part of the format; only nilness,
 	direction, and capacity are represented.
+```

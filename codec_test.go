@@ -1445,6 +1445,12 @@ func Test_Interface(t *testing.T) {
 			},
 			nil,
 		},
+		// #4
+		{
+			testInterface(123),
+			nil,
+			nil,
+		},
 	}
 	runTests(items, reg, t)
 }
@@ -2097,6 +2103,10 @@ func Test_ReferenceToTheSameValue(t *testing.T) {
 					return false
 				}
 				a := actual.([4]any)
+				a[2].(map[byte]byte)[2] = 200
+				if (*a[0].(*map[byte]byte))[2] != 200 || (*a[1].(*map[byte]byte))[2] != 200 || a[3].(map[byte]byte)[2] != 200 {
+					return false
+				}
 				*a[0].(*map[byte]byte) = map[byte]byte{1: 200}
 				return reflect.DeepEqual(a[0], a[1])
 			},
@@ -2114,6 +2124,10 @@ func Test_ReferenceToTheSameValue(t *testing.T) {
 					return false
 				}
 				a := actual.([4]any)
+				a[2].(map[byte]byte)[2] = 200
+				if (*a[0].(*map[byte]byte))[2] != 200 || (*a[1].(*map[byte]byte))[2] != 200 || a[3].(map[byte]byte)[2] != 200 {
+					return false
+				}
 				*a[1].(*map[byte]byte) = map[byte]byte{2: 2}
 				return reflect.DeepEqual(*a[0].(*map[byte]byte), a[3])
 			},
@@ -2139,6 +2153,10 @@ func Test_ReferenceToTheSameValue(t *testing.T) {
 					return false
 				}
 				a := actual.([4]any)
+				a[2].([]byte)[0] = 200
+				if (*a[0].(*[]byte))[0] != 200 || (*a[1].(*[]byte))[0] != 200 || a[3].([]byte)[0] != 200 {
+					return false
+				}
 				*a[1].(*[]byte) = []byte{0}
 				return reflect.DeepEqual(a[0], a[1])
 			},
@@ -2156,6 +2174,10 @@ func Test_ReferenceToTheSameValue(t *testing.T) {
 					return false
 				}
 				a := actual.([4]any)
+				a[2].([]byte)[0] = 200
+				if (*a[0].(*[]byte))[0] != 200 || (*a[1].(*[]byte))[0] != 200 || a[3].([]byte)[0] != 200 {
+					return false
+				}
 				*a[1].(*[]byte) = []byte{0}
 				return reflect.DeepEqual(*a[0].(*[]byte), a[3])
 			},
@@ -2174,6 +2196,10 @@ func Test_ReferenceToTheSameValue(t *testing.T) {
 					return false
 				}
 				a := actual.([4]any)
+				a[2].([]byte)[3] = 200
+				if (*a[0].(*[]byte))[1] != 200 || (*a[1].(*[]byte))[1] != 200 || a[3].([]byte)[3] != 200 {
+					return false
+				}
 				*a[1].(*[]byte) = []byte{0}
 				return reflect.DeepEqual(*a[0].(*[]byte), a[3].([]byte)[2:4])
 			},

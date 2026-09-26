@@ -1,96 +1,188 @@
-# Overview
+# codec
 
-Package codec contains a serializer with that you can serialize (and unserialize)
-go object of any type (including channels and functions) in runtime.
+`codec` is a Go serializer that converts values to a binary representation and
+restores them at runtime. It supports primitive values and composite Go values,
+including pointers, interfaces, arrays, slices, maps, structs, channels, functions and shared references between values.
 
-## Install
+## Contents
 
-```go
-go get -u github.com/URALINNOVATSIYA/codec
+- [Installation](#installation)
+- [Quick start](#quick-start)
+- [Type registration](#type-registration)
+- [Custom serialization](#custom-serialization)
+- [Capabilities](#capabilities)
+- [Limitations](#limitations)
+
+## Installation
+
+```bash
+go get github.com/URALINNOVATSIYA/codec
 ```
 
-# Usage
+## Quick start
 
-To serialize any value in binary data use function Serialize:
+For a single operation, use the package-level functions:
 
 ```go
-value := ... // a value to serialize
+package main
 
-data := Serialize(value)
+import (
+	"fmt"
+
+	"github.com/URALINNOVATSIYA/codec"
+)
+
+func main() {
+	original := map[string]any{
+		"name":  "Ada",
+		"active": true,
+		"scores": []int{10, 20, 30},
+	}
+
+	data := codec.Serialize(original)
+	value, err := codec.Unserialize(data)
+	if err != nil {
+		panic(err)
+	}
+
+	fmt.Printf("%#v\n", value)
+}
 ```
 
-or use type Serializer:
+When a serializer is reused, or when a custom type registry is needed, use the
+stateful types directly:
 
 ```go
-value := ... // a value to serialize
-
-serializer := NewSerializer(GetStructCodingMode())
+serializer := codec.NewSerializer()
 data := serializer.Encode(value)
+
+unserializer := codec.NewUnserializer()
+decoded, err := unserializer.Decode(data)
+if err != nil {
+	panic(err)
+}
 ```
 
-To unserialize binary data do as follows:
+`Serialize` and `Unserialize` also accept options. A `*TypeRegistry` passed to
+both operations makes the type mapping explicit and consistent:
 
 ```go
-var data []byte = ... // serialized value
+type MyMessage struct {
+	Text string
+}
 
-value, err := Unserialize(data)
+registry := codec.NewTypeRegistry(false)
+registry.RegisterBaseTypes()
+registry.RegisterTypeOf(MyMessage{})
+
+data := codec.Serialize(MyMessage{Text: "hello"}, registry)
+value, err := codec.Unserialize(data, registry)
 ```
 
-or 
+## Type registration
+
+The serializer writes type identifiers to the binary data. The unserializer
+uses the registry to resolve those identifiers back to Go types. By default,
+the package registry registers encountered types automatically. This is
+convenient, but the resulting registration order can vary between processes or
+between different serialization paths.
+
+For a stable registry, register all application types before serialization and
+unserialization:
 
 ```go
-var data []byte = ... // serialized value
+package main
 
-unserializer := NewUnserializer(GetStructCodingMode())
-value, err := unserializer.Decode(data)
+import (
+	"reflect"
+
+	"github.com/URALINNOVATSIYA/codec"
+)
+
+type User struct {
+	Name  string
+	Active bool
+}
+
+func registerTypes() {
+	// Register a type by providing a zero value.
+	codec.RegisterTypeOf(User{})
+	codec.RegisterTypeOf(map[string][]bool{})
+
+	// Or register a reflect.Type directly.
+	codec.RegisterType(reflect.TypeOf([]User{}))
+}
 ```
 
-# Type registration
-
-To correct recover a serialized value we need to create its type dynamically 
-in runtime. For this, we must register type of value before its serialization 
-and unserialization.
-
-By default, serializer registers each encountered type automatically.
-It's enough for some cases, but somewhere it leads to violation of type
-registration order. To ensure fixed order of type registration we should
-register each type in out program before any serialization or unserialization.
-
-We can do it as follows:
+For strict control, create a registry with automatic registration disabled:
 
 ```go
-// register zero value of a type
-RegisterTypeOf(map[string][]bool{})
-RegisterTypeOf(struct{b bool; i int}{})
+registry := codec.NewTypeRegistry(false)
+registry.RegisterBaseTypes()
+registry.RegisterTypeOf(User{})
 
-// or register type directly
-v := [][]any{} 
-RegisterType(reflect.TypeOf(v))
+serializer := codec.NewSerializer().WithTypeRegistry(registry)
+unserializer := codec.NewUnserializer().WithTypeRegistry(registry)
 ```
 
-**Note:** ```RegisterType``` works for functions but cannot guarantee uniqueness
-of function value because function type does not have ant information about function
-name. To get full information you must register functions through ```RegisterTypeOf```  
+`RegisterTypeOf` is the preferred way to register a function: it registers
+both the function type and the concrete function value. Registering only a
+function type cannot uniquely identify a function value because the type does
+not contain the function name. Use `RegisterFunc` when registering a function
+value directly.
 
-You can also turn off automatic registration of types calling ```TurnOffTypeAutoRegistration```
+The package-level `TurnOffTypeAutoRegistration` and
+`TurnOnTypeAutoRegistration` functions control automatic registration in the
+default registry. A custom `TypeRegistry` exposes the same controls as methods.
 
-# Custom serialization
+## Custom serialization
 
-To implement your own custom serialization a type must implements ```Serializable``` interface:
+A type can control its own representation by implementing `Serializable`.
+Both methods must be defined on the value type, not only on a pointer type:
 
 ```go
+import "fmt"
+
 type Flag bool
 
-func (f Flag) Serialize() []byte {
-	if f {
+func (flag Flag) Serialize() []byte {
+	if flag {
 		return []byte{1}
 	}
 	return []byte{0}
 }
 
-func (f Flag) Unserialize(data []byte) (any, error) {
-	return data[0] == 1, nil
+func (flag Flag) Unserialize(data []byte) (any, error) {
+	if len(data) != 1 {
+		return nil, fmt.Errorf("invalid Flag data length: %d", len(data))
+	}
+	return Flag(data[0] == 1), nil
 }
 ```
 
-**Note:** methods of ```Serializable``` must relate to a type value, not to pointer to the value.  
+The type must be registered in the same registry used for decoding. The
+`Unserialize` method is responsible for validating its input and returning a
+value of the custom type.
+
+## Capabilities
+
+- Binary serialization and deserialization of Go values at runtime.
+- Primitive values, strings, arrays, slices, maps, structs and interfaces.
+- Pointers, repeated references and cyclic object graphs.
+- Channels (only capacity).
+- Function values when the function is registered correctly.
+- Automatic or explicit type registration through `TypeRegistry`.
+- Custom representations through `Serializable`.
+
+## Limitations
+
+Version 1 has the following limitations:
+
+- `unsafe.Pointer` cannot be restored correctly after deserialization.
+- `uintptr` cannot be restored correctly after deserialization.
+- Values from channels are not serialized in this version. Full channel support is
+  planned for the next version.
+
+There are no other known type or data-structure limitations beyond the normal
+requirement that the decoder must have access to the types and registered
+function values referenced by the serialized data.

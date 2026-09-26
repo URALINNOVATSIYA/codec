@@ -20,11 +20,6 @@ func c2b(v int) []byte {
 	return u2bs(uint64(v), 4)
 }
 
-func b2c(b []byte) (int, int) {
-	v, bytes := bs2u(b, 4)
-	return int(v), bytes
-}
-
 func bs2u(b []byte, sizeBits int) (v uint64, length int) {
 	size := len(b)
 	if size == 0 {
