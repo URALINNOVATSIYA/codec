@@ -2305,6 +2305,27 @@ func Test_BackwardPointerToContainer(t *testing.T) {
 				return *s.F2.(*any) == s.F2 && s.F2 != s
 			},
 		},
+		// #6
+		{
+			func() any {
+				a := [4]any{}
+				s := []any{1, 2, 3}
+				a[0] = s[0:2]
+				a[1] = s[1:3]
+				a[2] = &s[1]
+				a[3] = s
+				return a
+			}(),
+			nil,
+			func(expected, actual any) bool {
+				if !defaultEq(expected, actual) {
+					return false
+				}
+				a := actual.([4]any)
+				a[3].([]any)[1] = true
+				return a[0].([]any)[1].(bool) == true && a[1].([]any)[0].(bool) == true
+			},
+		},
 	}
 	runTests(items, reg, t)
 }
@@ -2423,7 +2444,7 @@ func Test_ForwardPointerToContainer(t *testing.T) {
 				return a[0] == &a[2] && a[1] == &a[2] && a[3] == &a[2] && a[2] == &a[0]
 			},
 		},
-		// #6
+		// #7
 		{
 			func() any {
 				s := &testS2{}
@@ -2440,7 +2461,7 @@ func Test_ForwardPointerToContainer(t *testing.T) {
 				return *s.F1.(*any) == s.F2 && *s.F2.(*any) == s.F1
 			},
 		},
-		// #7
+		// #8
 		{
 			func() any {
 				a := &[2]any{}
@@ -2457,7 +2478,7 @@ func Test_ForwardPointerToContainer(t *testing.T) {
 				return *a[0].(*any) == a[1] && *a[1].(*any) == a[0]
 			},
 		},
-		// #8
+		// #9
 		{
 			func() any {
 				s := &testS2{}
@@ -2476,7 +2497,7 @@ func Test_ForwardPointerToContainer(t *testing.T) {
 				return **s.F1.(**any) == s.F2 && **s.F2.(**any) == s.F1
 			},
 		},
-		// #9
+		// #10
 		{
 			func() any {
 				a := &[2]any{}
@@ -2495,7 +2516,7 @@ func Test_ForwardPointerToContainer(t *testing.T) {
 				return **a[0].(**any) == a[1] && **a[1].(**any) == a[0]
 			},
 		},
-		// #10
+		// #11
 		{
 			func() any {
 				s := &testS3{}
@@ -2514,7 +2535,7 @@ func Test_ForwardPointerToContainer(t *testing.T) {
 				return **s.F1.(**any) == s.F3 && **s.F2.(**any) == s.F3 && s.F3 == 123
 			},
 		},
-		// #11
+		// #12
 		{
 			func() any {
 				s := &testS3{}
@@ -2531,6 +2552,27 @@ func Test_ForwardPointerToContainer(t *testing.T) {
 				s := actual.(*testS3)
 				s.F2 = 123
 				return **s.F1.(**any) == s.F2 && **s.F3.(**any) == s.F2 && s.F2 == 123
+			},
+		},
+		// #13
+		{
+			func() any {
+				a := [4]any{}
+				s := []any{1, 2, 3}
+				a[0] = &s[1]
+				a[1] = s[0:2]
+				a[2] = s[1:3]
+				a[3] = s
+				return a
+			}(),
+			nil,
+			func(expected, actual any) bool {
+				if !defaultEq(expected, actual) {
+					return false
+				}
+				a := actual.([4]any)
+				a[3].([]any)[1] = true
+				return a[1].([]any)[1].(bool) == true && a[2].([]any)[0].(bool) == true
 			},
 		},
 	}

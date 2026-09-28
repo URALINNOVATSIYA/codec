@@ -187,29 +187,16 @@ func (s *Serializer) setReference(id, ref int) {
 	}
 	pid := s.parents[id]
 	delete(s.parents, id)
+	s.parents[ref] = pid
 	s.childs[-1] = slices.DeleteFunc(s.childs[-1], func(i int) bool {
 		return i == ref
 	})
-	s.parents[ref] = pid
-	childs := s.childs[pid][:0]
-	foundRef := false
-	for _, childId := range s.childs[pid] {
-		switch childId {
-		case ref:
-			if !foundRef {
-				childs = append(childs, childId)
-				foundRef = true
-			}
-		case id:
-			if !foundRef {
-				childs = append(childs, ref)
-				foundRef = true
-			}
-		default:
-			childs = append(childs, childId)
+	for i, childId := range s.childs[pid] {
+		if childId == id {
+			s.childs[pid][i] = ref
+			break
 		}
 	}
-	s.childs[pid] = childs
 }
 
 func (s *Serializer) visit(v reflect.Value, parentId, parentContainerId int) {
