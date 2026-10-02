@@ -203,31 +203,28 @@ func (s *Serializer) visit(v reflect.Value, parentId, parentContainerId int) {
 	id := s.addNode(parentId, v)
 	switch v.Kind() {
 	case reflect.Chan:
-		fallthrough
-	case reflect.Func:
-		fallthrough
-	case reflect.String:
 		s.addReference(v, id)
-	case reflect.Slice:
-		if !v.IsNil() {
-			s.visitList(v, id)
-		}
+	case reflect.Func:
+		s.addReference(v, id)
+	case reflect.String:
+		s.addSlice(v, id)
 	case reflect.Map:
-		if s.addReference(v, id) < 0 {
-			s.visitMap(v, id)
-		}
+		s.visitMap(v, id)
 	case reflect.Interface:
 		s.visitInterface(v, id, parentContainerId)
-	case reflect.Array:
-		s.visitList(v, id)
-	case reflect.Struct:
-		s.visitStruct(v, id)
 	case reflect.Pointer:
 		s.visitPointer(v, id, parentContainerId)
+	case reflect.Struct:
+		s.visitStruct(v, id)
+	case reflect.Array, reflect.Slice:
+		s.visitList(v, id)
 	}
 }
 
 func (s *Serializer) visitList(v reflect.Value, id int) {
+	if v.Kind() == reflect.Slice && v.IsNil() {
+		return
+	}
 	slice, new := s.addSlice(v, id)
 	if !new {
 		return
@@ -247,6 +244,9 @@ func (s *Serializer) visitList(v reflect.Value, id int) {
 }
 
 func (s *Serializer) visitMap(v reflect.Value, id int) {
+	if s.addReference(v, id) >= 0 {
+		return
+	}
 	iter := v.MapRange()
 	for iter.Next() {
 		s.visit(iter.Key(), id, -1)
@@ -448,13 +448,6 @@ func (s *Serializer) encodeBool(v reflect.Value) []byte {
 	return []byte{meta_fls}
 }
 
-func (s *Serializer) encodeString(v reflect.Value, id int) []byte {
-	if ref, exists := s.refs[id]; exists {
-		return s.encodeReference(ref)
-	}
-	return append(c2b(v.Len()), v.String()...)
-}
-
 func (s *Serializer) encodeUint8(v reflect.Value) []byte {
 	return []byte{uint8(v.Uint())}
 }
@@ -545,11 +538,23 @@ func (s *Serializer) encodeFunc(v reflect.Value, id int) []byte {
 	return append([]byte{meta_nonil}, u2bs(uint64(s.typeRegistry.funcIdByValue(v)), 3)...)
 }
 
-func (s *Serializer) encodeArray(id int) []byte {
-	var b []byte
-	for _, containerId := range s.childs[id] {
-		b = append(b, s.encodeValue(s.childs[containerId][0])...)
+func (s *Serializer) encodeString(v reflect.Value, id int) []byte {
+	if ref, exists := s.refs[id]; exists {
+		if s.slices.Get(ref).Parent == nil {
+			return s.encodeReference(ref)
+		}
+		id = ref
 	}
+	slice := s.slices.Get(id)
+	if slice.Parent == nil {
+		return append(i2b(v.Len()), v.String()...)
+	}
+	p := slice.Parent
+	b := i2b(-1)
+	b = append(b, i2b(s.imap[p.Id])...)
+	i, j, _ := p.SliceOf(slice)
+	b = append(b, c2b(i)...)
+	b = append(b, c2b(j)...)
 	return b
 }
 
@@ -593,6 +598,14 @@ func (s *Serializer) encodeMap(v reflect.Value, id int) []byte {
 	b := append([]byte{meta_nonil}, c2b(v.Len())...)
 	for _, childId := range s.childs[id] {
 		b = append(b, s.encodeValue(childId)...)
+	}
+	return b
+}
+
+func (s *Serializer) encodeArray(id int) []byte {
+	var b []byte
+	for _, containerId := range s.childs[id] {
+		b = append(b, s.encodeValue(s.childs[containerId][0])...)
 	}
 	return b
 }

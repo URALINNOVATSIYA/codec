@@ -89,12 +89,25 @@ func (u *Unserializer) decode() reflect.Value {
 	return u.values[0]
 }
 
+func (u *Unserializer) decodeCount(sizeBits int) uint64 {
+	cnt, length := bs2u(u.data[u.pos:], sizeBits)
+	if length <= 0 {
+		panic(io.ErrUnexpectedEOF)
+	}
+	u.pos += length
+	return cnt
+}
+
 func (u *Unserializer) decodeId() int {
 	return int(u.decodeCount(4))
 }
 
 func (u *Unserializer) decodeLength() int {
 	return int(u.decodeCount(4))
+}
+
+func (u *Unserializer) decodeIndex() int {
+	return int(u2i(u.decodeCount(4)))
 }
 
 func (u *Unserializer) decodeType() reflect.Type {
@@ -202,10 +215,6 @@ func (u *Unserializer) decodeNil() {
 
 func (u *Unserializer) decodeBool(v reflect.Value) {
 	v.SetBool(u.readByte() == meta_tru)
-}
-
-func (u *Unserializer) decodeString(v reflect.Value) {
-	v.SetString(string(u.readBytes(u.decodeLength())))
 }
 
 func (u *Unserializer) decodeUint8(v reflect.Value) {
@@ -333,26 +342,22 @@ func (u *Unserializer) decodeMap(t reflect.Type, v reflect.Value) {
 	}
 }
 
+func (u *Unserializer) decodeString(v reflect.Value) {
+	length := u.decodeIndex()
+	if length < 0 {
+		u.decodeSliceExp(false)
+		return
+	}
+	v.SetString(string(u.readBytes(length)))
+}
+
 func (u *Unserializer) decodeSlice(t reflect.Type, v reflect.Value) {
 	top := u.readByte()
 	if top&meta_nil != 0 {
 		return
 	}
 	if top&meta_sexp != 0 {
-		parentId := int(u2i(u.decodeCount(4)))
-		i := u.decodeLength()
-		j := u.decodeLength()
-		k := u.decodeLength()
-		id := len(u.values) - 1
-		if u.values[id-1].Kind() == reflect.Interface {
-			id--
-		}
-		u.slices[parentId] = append(u.slices[parentId], sliceExp{
-			id: id,
-			i:  i,
-			j:  j,
-			k:  k,
-		})
+		u.decodeSliceExp(true)
 		return
 	}
 	length := u.decodeLength()
@@ -363,6 +368,26 @@ func (u *Unserializer) decodeSlice(t reflect.Type, v reflect.Value) {
 		elem := v.Index(i)
 		u.decodeContainer(elemType, elem)
 	}
+}
+
+func (u *Unserializer) decodeSliceExp(capUsed bool) {
+	parentId := u.decodeIndex()
+	i := u.decodeLength()
+	j := u.decodeLength()
+	k := -1
+	if capUsed {
+		k = u.decodeLength()
+	}
+	id := len(u.values) - 1
+	if u.values[id-1].Kind() == reflect.Interface {
+		id--
+	}
+	u.slices[parentId] = append(u.slices[parentId], sliceExp{
+		id: id,
+		i:  i,
+		j:  j,
+		k:  k,
+	})
 }
 
 func (u *Unserializer) decodeArray(t reflect.Type, v reflect.Value) {
@@ -424,20 +449,16 @@ func (u *Unserializer) decodeReference(v reflect.Value) {
 	v.Set(u.values[u.decodeId()])
 }
 
-func (u *Unserializer) decodeCount(sizeBits int) uint64 {
-	cnt, length := bs2u(u.data[u.pos:], sizeBits)
-	if length <= 0 {
-		panic(io.ErrUnexpectedEOF)
-	}
-	u.pos += length
-	return cnt
-}
-
 func (u *Unserializer) restoreSlices() {
 	for parentId, exps := range u.slices {
 		p := u.values[parentId]
 		for _, exp := range exps {
-			s := p.Slice3(exp.i, exp.j, exp.k)
+			var s reflect.Value
+			if exp.k < 0 {
+				s = p.Slice(exp.i, exp.j)
+			} else {
+				s = p.Slice3(exp.i, exp.j, exp.k)
+			}
 			u.values[exp.id].Set(s)
 		}
 	}

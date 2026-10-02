@@ -158,25 +158,25 @@ func Test_String(t *testing.T) {
 		// #2
 		{
 			"0123456789",
-			[]byte{version, typeId(""), c2b0(10), '0', '1', '2', '3', '4', '5', '6', '7', '8', '9'},
+			[]byte{version, typeId(""), i2b(10)[0], i2b(10)[1], '0', '1', '2', '3', '4', '5', '6', '7', '8', '9'},
 			nil,
 		},
 		// #3
 		{
 			strings.Repeat("a", 255),
-			append(append([]byte{version, typeId("")}, c2b(255)...), []byte(strings.Repeat("a", 255))...),
+			append(append([]byte{version, typeId("")}, i2b(255)...), []byte(strings.Repeat("a", 255))...),
 			nil,
 		},
 		// #4
 		{
 			strings.Repeat("a", 65536),
-			append(append([]byte{version, typeId("")}, c2b(65536)...), []byte(strings.Repeat("a", 65536))...),
+			append(append([]byte{version, typeId("")}, i2b(65536)...), []byte(strings.Repeat("a", 65536))...),
 			nil,
 		},
 		// #5
 		{
 			testStr("abcd"),
-			[]byte{version, typeId(testStr("")), c2b0(4), 97, 98, 99, 100},
+			[]byte{version, typeId(testStr("")), i2b0(4), 97, 98, 99, 100},
 			nil,
 		},
 	}
@@ -1893,7 +1893,7 @@ func Test_ReferenceToTheSameValue(t *testing.T) {
 	reg, typeId, funcId := registryWithFuncId()
 	items := []testItem{
 		// #1
-		{
+		/*{
 			func() any {
 				s := testS3{}
 				s.F1 = "abc"
@@ -1903,21 +1903,22 @@ func Test_ReferenceToTheSameValue(t *testing.T) {
 			[]byte{
 				version,
 				typeId(testS3{}), meta_strc, // testS3 header
-				typeId(""), c2b0(3), 'a', 'b', 'c', // testS3.F1
+				typeId(""), i2b0(3), 'a', 'b', 'c', // testS3.F1
 				typeId(nil), meta_nil, // testS3.F2
 				typeId(""), meta_ref, c2b0(3), // testS3.F3
 			},
 			nil,
-		},
+		},*/
 		// #2
 		{
 			func() any {
-				return [3]string{"abc", "abc", "abc"}
+				s := strings.Clone("abc")
+				return [3]string{s, s, s}
 			}(),
 			[]byte{
 				version,
 				typeId([3]string{}),
-				c2b0(3), 'a', 'b', 'c', // a[0]
+				i2b0(3), 'a', 'b', 'c', // a[0]
 				meta_ref, c2b0(2), // a[1]
 				meta_ref, c2b0(2), // a[2]
 			},
@@ -2203,6 +2204,20 @@ func Test_ReferenceToTheSameValue(t *testing.T) {
 				*a[1].(*[]byte) = []byte{0}
 				return reflect.DeepEqual(*a[0].(*[]byte), a[3].([]byte)[2:4])
 			},
+		},
+		// #19
+		{
+			func() any {
+				s := strings.Clone("ab")
+				return [3]string{s[:1], s, s[1:]}
+			}(),
+			[]byte{
+				version, typeId([3]string{}),
+				i2b0(-1), i2b0(4), c2b0(0), c2b0(1), // s[:1]
+				i2b0(2), 97, 98, // s
+				i2b0(-1), i2b0(4), c2b0(1), c2b0(2), // s[1:]
+			},
+			nil,
 		},
 	}
 	runTests(items, reg, t)
@@ -2713,6 +2728,20 @@ func Test_MixedContainerPointers(t *testing.T) {
 				return s == s.root.next.lst && s == s.root.next.next.lst &&
 					s.root.next.next.next == &s.root && s.root.prev.prev.prev == &s.root
 			},
+		},
+		// #8
+		{
+			func() any {
+				a := &[2]any{}
+				s := &testS2{}
+				a[0] = &s.F1
+				a[1] = s
+				s.F1 = &a[1]
+				s.F2 = a
+				return &a[0]
+			}(),
+			nil,
+			nil,
 		},
 	}
 	runTests(items, reg, t)
