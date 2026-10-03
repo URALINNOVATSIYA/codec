@@ -294,6 +294,9 @@ func (s *Serializer) visitSlices() {
 		if p.Id < 0 {
 			s.visit(p.V, -1, -1)
 		}
+		if p.V.Kind() == reflect.String {
+			continue
+		}
 		pchilds := s.childs[p.Id]
 		elemSize := p.ElemType.Size()
 		for _, child := range p.Childs {

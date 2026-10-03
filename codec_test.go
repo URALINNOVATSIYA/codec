@@ -173,7 +173,7 @@ func Test_String(t *testing.T) {
 			nil,
 		},
 		// #6
-		/*{
+		{
 			func() any {
 				data := []byte("abcdef")
 				text := unsafe.String(unsafe.SliceData(data), len(data))
@@ -188,7 +188,11 @@ func Test_String(t *testing.T) {
 					Text  string
 					Bytes []byte
 				})
-				return a.Text == "abcdef" && string(a.Bytes) == "abcdef"
+				if a.Text != "abcdef" || string(a.Bytes) != "abcdef" {
+					return false
+				}
+				a.Bytes[0] = 'z'
+				return a.Text[0] == 'z'
 			},
 		},
 		// #7
@@ -207,9 +211,13 @@ func Test_String(t *testing.T) {
 					Bytes []byte
 					Text  string
 				})
-				return a.Text == "abcdef" && string(a.Bytes) == "abcdef"
+				if a.Text != "abcdef" || string(a.Bytes) != "abcdef" {
+					return false
+				}
+				a.Bytes[0] = 'z'
+				return a.Text[0] == 'z'
 			},
-		},*/
+		},
 	}
 	runTests(items, reg, t)
 }
@@ -1942,7 +1950,7 @@ func Test_Slice(t *testing.T) {
 			[]byte{
 				version, typeId([3][]byte{}),
 				meta_slice, c2b0(6), c2b0(6), 1, 2, 3, 4, 5, 6, // s
-				meta_slice | meta_sexp, i2b0(2), c2b0(2), c2b0(4), c2b0(4), // s[2:4]
+				meta_slice | meta_sexp, i2b0(2), c2b0(2), c2b0(4), c2b0(6), // s[2:4]
 				meta_slice | meta_sexp, i2b0(2), c2b0(0), c2b0(3), c2b0(4), // s[0:3:4]
 			},
 			func(expected, actual any) bool {
@@ -1958,7 +1966,7 @@ func Test_Slice(t *testing.T) {
 				p[2] = 102
 				p[3] = 103
 				return s2[0] == 100 && s2[1] == 101 && s2[2] == 102 && cap(s2) == 4 &&
-					s1[0] == 102 && s1[1] == 103 && cap(s1) == 2
+					s1[0] == 102 && s1[1] == 103 && cap(s1) == 4
 			},
 		},
 		// #5
@@ -1970,7 +1978,7 @@ func Test_Slice(t *testing.T) {
 			[]byte{
 				version, typeId([3]any{}),
 				typeId([]byte{}), meta_slice, c2b0(6), c2b0(6), 1, 2, 3, 4, 5, 6, // s
-				typeId([]byte{}), meta_slice | meta_sexp, i2b0(3), c2b0(2), c2b0(4), c2b0(4), // s[2:4]
+				typeId([]byte{}), meta_slice | meta_sexp, i2b0(3), c2b0(2), c2b0(4), c2b0(6), // s[2:4]
 				typeId([]byte{}), meta_slice | meta_sexp, i2b0(3), c2b0(0), c2b0(3), c2b0(4), // s[0:3:4]
 			},
 			func(expected, actual any) bool {
@@ -1986,7 +1994,7 @@ func Test_Slice(t *testing.T) {
 				p[2] = 102
 				p[3] = 103
 				return s2[0] == 100 && s2[1] == 101 && s2[2] == 102 && cap(s2) == 4 &&
-					s1[0] == 102 && s1[1] == 103 && cap(s1) == 2
+					s1[0] == 102 && s1[1] == 103 && cap(s1) == 4
 			},
 		},
 		// #6
@@ -1997,7 +2005,7 @@ func Test_Slice(t *testing.T) {
 			}(),
 			[]byte{
 				version, typeId([3]any{}),
-				typeId([]byte{}), meta_slice | meta_sexp, i2b(6)[0], c2b0(2), c2b0(4), c2b0(4), // s[2:4]
+				typeId([]byte{}), meta_slice | meta_sexp, i2b(6)[0], c2b0(2), c2b0(4), c2b0(6), // s[2:4]
 				typeId([]byte{}), meta_slice, c2b0(6), c2b0(6), 1, 2, 3, 4, 5, 6, // s
 				typeId([]byte{}), meta_slice | meta_sexp, i2b(6)[0], c2b0(0), c2b0(3), c2b0(4), // s[0:3:4]
 			},
@@ -2014,7 +2022,7 @@ func Test_Slice(t *testing.T) {
 				p[2] = 102
 				p[3] = 103
 				return s2[0] == 100 && s2[1] == 101 && s2[2] == 102 && cap(s2) == 4 &&
-					s1[0] == 102 && s1[1] == 103 && cap(s1) == 2
+					s1[0] == 102 && s1[1] == 103 && cap(s1) == 4
 			},
 		},
 		// #7
@@ -2030,7 +2038,7 @@ func Test_Slice(t *testing.T) {
 				version, typeId((*[3]any)(nil)), meta_nonil, // *a
 				typeId([3]any{}),                                                            // a
 				typeId([]any{}), meta_slice | meta_sexp, i2b0(1), c2b0(0), c2b0(2), c2b0(3), // a[0:2]
-				typeId([]any{}), meta_slice | meta_sexp, i2b0(1), c2b0(1), c2b0(2), c2b0(2), // a[1:2]
+				typeId([]any{}), meta_slice | meta_sexp, i2b0(1), c2b0(1), c2b0(2), c2b0(3), // a[1:2]
 				typeId([]any{}), meta_slice | meta_sexp, i2b0(1), c2b0(1), c2b0(3), c2b0(3), // a[1:3]
 				// refs
 				meta_ref, c2b0(1), c2b0(0),

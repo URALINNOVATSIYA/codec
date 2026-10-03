@@ -465,14 +465,37 @@ func (u *Unserializer) parentId(id int) int {
 func (u *Unserializer) restoreSlices() {
 	for parentId, exps := range u.slices {
 		p := u.values[parentId]
+		pkind, tkind := p.Kind(), reflect.Invalid
 		for _, exp := range exps {
 			var s reflect.Value
-			if exp.k < 0 {
+			if exp.k < 0 || pkind == reflect.String {
 				s = p.Slice(exp.i, exp.j)
 			} else {
 				s = p.Slice3(exp.i, exp.j, exp.k)
 			}
-			u.values[exp.id].Set(s)
+			t := u.values[exp.id]
+			tkind = t.Kind()
+			if tkind == reflect.Interface {
+				tkind = t.Elem().Kind()
+			}
+			switch tkind {
+			case reflect.String:
+				if pkind == reflect.String {
+					t.SetString(s.String())
+				} else {
+					t.SetString(unsafe.String((*byte)(s.UnsafePointer()), s.Len()))
+				}
+			case reflect.Slice:
+				if pkind == reflect.String {
+					s = reflect.ValueOf(unsafe.Slice(unsafe.StringData(s.String()), s.Len()))
+				}
+				if t.Type() != s.Type() {
+					s = s.Convert(t.Type())
+				}
+				t.Set(s)
+			default:
+				panic("slice expression target must be a string or slice")
+			}
 		}
 	}
 }
