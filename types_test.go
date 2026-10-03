@@ -78,6 +78,26 @@ type (
 		F4 byte
 		f5 string `codec:"id=1"`
 	}
+	graphNode struct {
+		Value int
+		Next  *graphNode
+		Prev  *graphNode
+		Any   any
+	}
+	graphMixed struct {
+		Node  *graphNode
+		Items []any
+		Table map[string]any
+		Box   any
+	}
+	graphArray struct {
+		A [4]int
+		P *int
+	}
+	channelHolder struct {
+		A chan int
+		B chan int
+	}
 )
 
 type testSerializableInt int

@@ -52,8 +52,8 @@ has a type identifier followed by the representation of that value:
 node = type_id value
 ```
 
-The value graph is written in traversal order. References can point to an
-earlier node, which allows shared values and cycles to be restored.
+The value graph is written in traversal order. References can point to earlier
+or later nodes, which allows shared values and cycles to be restored.
 
 ## Self-delimiting integers
 
@@ -132,13 +132,24 @@ values in the same order.
 
 ### Strings
 
-A string is encoded as its byte length followed by its UTF-8/string bytes:
+A string that does not share backing storage with another string or byte slice
+is encoded as its signed byte length followed by its bytes:
 
 ```text
-u4 byte_length string_bytes
+i4 byte_length string_bytes
 ```
 
-Repeated strings may instead be represented by a reference node.
+When a string shares backing storage with another string or byte slice, it is
+encoded as a slice expression. The length is the signed sentinel `-1`, followed
+by the parent node ID and the start and end byte indexes:
+
+```text
+i4(-1) i4 parent_id u4 start u4 end
+```
+
+Repeated strings may instead be represented by a reference node. String
+references and slice expressions are resolved after the referenced nodes have
+been decoded.
 
 ### Functions and channels
 
@@ -271,7 +282,8 @@ meta_ref referenced_node_id
 
 This representation is used for repeated strings, maps, slices, channels,
 functions, custom serializable reference-like values, and other shared
-objects.
+objects. The referenced node may appear later in the encoded value stream;
+forward references are resolved after all value nodes have been read.
 
 After the encoded values, the stream may contain pointer-link records:
 

@@ -26,6 +26,7 @@ type testItem struct {
 }
 
 func runTests(items []testItem, typeRegistry *TypeRegistry, t *testing.T) {
+	t.Helper()
 	serializer := NewSerializer().WithTypeRegistry(typeRegistry)
 	unserializer := NewUnserializer().WithTypeRegistry(typeRegistry)
 	for i, item := range items {
@@ -97,14 +98,6 @@ func registryWithFuncId() (*TypeRegistry, func(v any) byte, func(v any) byte) {
 			id := reg.funcIdByValue(reflect.ValueOf(v))
 			return u2bs(uint64(id), 3)[0]
 		}
-}
-
-func interfaceId(reg *TypeRegistry) byte {
-	if id, exists := reg.typeIdByName("interface {}"); exists {
-		return u2bs(uint64(id), 3)[0]
-	}
-	reg.RegisterType(reflect.TypeFor[any]())
-	return interfaceId(reg)
 }
 
 func Test_Nil(t *testing.T) {
@@ -179,6 +172,44 @@ func Test_String(t *testing.T) {
 			[]byte{version, typeId(testStr("")), i2b0(4), 97, 98, 99, 100},
 			nil,
 		},
+		// #6
+		/*{
+			func() any {
+				data := []byte("abcdef")
+				text := unsafe.String(unsafe.SliceData(data), len(data))
+				return struct {
+					Text  string
+					Bytes []byte
+				}{text, data}
+			}(),
+			nil,
+			func(_, actual any) bool {
+				a := actual.(struct {
+					Text  string
+					Bytes []byte
+				})
+				return a.Text == "abcdef" && string(a.Bytes) == "abcdef"
+			},
+		},
+		// #7
+		{
+			func() any {
+				data := []byte("abcdef")
+				text := unsafe.String(unsafe.SliceData(data), len(data))
+				return struct {
+					Bytes []byte
+					Text  string
+				}{data, text}
+			}(),
+			nil,
+			func(_, actual any) bool {
+				a := actual.(struct {
+					Bytes []byte
+					Text  string
+				})
+				return a.Text == "abcdef" && string(a.Bytes) == "abcdef"
+			},
+		},*/
 	}
 	runTests(items, reg, t)
 }
@@ -1028,21 +1059,25 @@ func Test_Complex64(t *testing.T) {
 func Test_Complex128(t *testing.T) {
 	reg, typeId := registry()
 	items := []testItem{
+		// #1
 		{
 			complex(float64(0), float64(0)),
 			[]byte{version, typeId(complex128(0)), 0b0001_0000, 0b0001_0000},
 			nil,
 		},
+		// #2
 		{
 			complex(float64(1), float64(0)),
 			[]byte{version, typeId(complex128(0)), 0b0011_0000, 240, 63, 0b0001_0000},
 			nil,
 		},
+		// #3
 		{
 			complex(float64(0), float64(1)),
 			[]byte{version, typeId(complex128(0)), 0b0001_0000, 0b0011_0000, 240, 63},
 			nil,
 		},
+		// #4
 		{
 			complex(1.23, -1.23),
 			[]byte{
@@ -1052,10 +1087,20 @@ func Test_Complex128(t *testing.T) {
 			},
 			nil,
 		},
+		// #5
 		{
 			testComplex128(1 + 2i),
 			[]byte{version, typeId(testComplex128(0)), 0b0011_0000, 240, 63, 0b0010_0000, 64},
 			nil,
+		},
+		// #6
+		{
+			complex(math.Inf(1), math.NaN()),
+			nil,
+			func(expected, actual any) bool {
+				n := actual.(complex128)
+				return math.IsInf(real(n), 1) && math.IsNaN(imag(n))
+			},
 		},
 	}
 	runTests(items, reg, t)
@@ -1096,25 +1141,41 @@ func Test_UnsafePointer(t *testing.T) {
 func Test_Chan(t *testing.T) {
 	reg, typeId := registry()
 	items := []testItem{
+		// #1
 		{
 			(<-chan bool)(nil),
 			[]byte{version, typeId(make(<-chan bool)), meta_nil},
 			nil,
 		},
+		// #2
 		{
 			make(chan int),
 			[]byte{version, typeId(make(chan int)), meta_nonil, c2b0(0)},
 			nil,
 		},
+		// #3
 		{
 			make(chan<- bool, 1),
 			[]byte{version, typeId(make(chan<- bool)), meta_nonil, c2b0(1)},
 			nil,
 		},
+		// #4
 		{
 			make(testChan, 10),
 			[]byte{version, typeId(testChan(nil)), meta_nonil, c2b0(10)},
 			nil,
+		},
+		// #5
+		{
+			func() any {
+				ch := make(chan int, 7)
+				return channelHolder{A: ch, B: ch}
+			}(),
+			nil,
+			func(expected, actual any) bool {
+				s := actual.(channelHolder)
+				return s.A == s.B && cap(s.A) == 7
+			},
 		},
 	}
 	runTests(items, reg, t)
@@ -1131,8 +1192,8 @@ func Test_Func(t *testing.T) {
 		},
 		// #2
 		{
-			registry,
-			[]byte{version, typeId(registry), meta_nonil, funcId(registry)},
+			funcId,
+			[]byte{version, typeId(funcId), meta_nonil, funcId(funcId)},
 			nil,
 		},
 		// #3
@@ -1248,6 +1309,64 @@ func Test_PointersToTheSameValue(t *testing.T) {
 			}(),
 			nil,
 			nil,
+		},
+		// #4
+		{
+			func() any {
+				a, b := 7, 7
+				return struct {
+					A *int
+					B *int
+				}{&a, &b}
+			}(),
+			nil,
+			func(expected, actual any) bool {
+				if !defaultEq(expected, actual) {
+					return false
+				}
+				s := actual.(struct {
+					A *int
+					B *int
+				})
+				return s.A != s.B
+			},
+		},
+		{
+			func() any {
+				leaf := &graphNode{Value: 99}
+				return struct {
+					L *graphNode
+					R *graphNode
+				}{
+					L: &graphNode{Next: leaf},
+					R: &graphNode{Next: leaf},
+				}
+			}(),
+			nil,
+			func(_, actual any) bool {
+				out := actual.(struct {
+					L *graphNode
+					R *graphNode
+				})
+				return out.L != nil && out.R != nil &&
+					out.L.Next == out.R.Next && out.L.Next.Value == 99
+			},
+		},
+		{
+			func() any {
+				return struct {
+					A *struct{}
+					B *struct{}
+				}{&struct{}{}, &struct{}{}}
+			}(),
+			nil,
+			func(_, actual any) bool {
+				out := actual.(struct {
+					A *struct{}
+					B *struct{}
+				})
+				return out.A != nil && out.B != nil
+			},
 		},
 	}
 	runTests(items, reg, t)
@@ -1451,6 +1570,17 @@ func Test_Interface(t *testing.T) {
 			nil,
 			nil,
 		},
+		{
+			func() any {
+				var p *graphNode
+				return p
+			}(),
+			nil,
+			func(_, actual any) bool {
+				p, ok := actual.(*graphNode)
+				return ok && p == nil
+			},
+		},
 	}
 	runTests(items, reg, t)
 }
@@ -1554,6 +1684,37 @@ func Test_Map(t *testing.T) {
 			nil,
 			nil,
 		},
+		{
+			struct {
+				Nil   map[string]int
+				Empty map[string]int
+			}{nil, map[string]int{}},
+			nil,
+			func(_, actual any) bool {
+				out := actual.(struct {
+					Nil   map[string]int
+					Empty map[string]int
+				})
+				return out.Nil == nil && out.Empty != nil
+			},
+		},
+		{
+			func() any {
+				m := map[string]any{}
+				m["self"] = m
+				return m
+			}(),
+			nil,
+			func(_, actual any) bool {
+				m := actual.(map[string]any)
+				self, ok := m["self"].(map[string]any)
+				if !ok {
+					return false
+				}
+				self["shared"] = true
+				return m["shared"] == true
+			},
+		},
 	}
 	runTests(items, reg, t)
 }
@@ -1601,6 +1762,24 @@ func Test_Array(t *testing.T) {
 			}(),
 			nil,
 			nil,
+		},
+		{
+			func() any {
+				a := [3]int{1, 2, 3}
+				return struct {
+					A [3]int
+					P *[3]int
+				}{a, &a}
+			}(),
+			nil,
+			func(_, actual any) bool {
+				out := actual.(struct {
+					A [3]int
+					P *[3]int
+				})
+				out.A[0] = 99
+				return out.P != nil && out.P[0] == 1
+			},
 		},
 	}
 	runTests(items, reg, t)
@@ -1885,6 +2064,31 @@ func Test_Slice(t *testing.T) {
 				return a[0][0] == 222
 			},
 		},
+		// #9
+		{
+			struct {
+				S []int
+			}{make([]int, 0, 17)},
+			nil,
+			func(_, actual any) bool {
+				s := actual.(struct {
+					S []int
+				}).S
+				return s != nil && len(s) == 0 && cap(s) == 17
+			},
+		},
+		// #10
+		{
+			testSlice{"a", "b", "c"},
+			nil,
+			nil,
+		},
+		// #11
+		{
+			testRecSlice{testRecSlice{nil, testRecSlice{}}, nil, testRecSlice{}},
+			nil,
+			nil,
+		},
 	}
 	runTests(items, reg, t)
 }
@@ -1893,7 +2097,7 @@ func Test_ReferenceToTheSameValue(t *testing.T) {
 	reg, typeId, funcId := registryWithFuncId()
 	items := []testItem{
 		// #1
-		/*{
+		{
 			func() any {
 				s := testS3{}
 				s.F1 = "abc"
@@ -1908,7 +2112,7 @@ func Test_ReferenceToTheSameValue(t *testing.T) {
 				typeId(""), meta_ref, c2b0(3), // testS3.F3
 			},
 			nil,
-		},*/
+		},
 		// #2
 		{
 			func() any {
@@ -2341,6 +2545,19 @@ func Test_BackwardPointerToContainer(t *testing.T) {
 				return a[0].([]any)[1].(bool) == true && a[1].([]any)[0].(bool) == true
 			},
 		},
+		// #7
+		{
+			func() any {
+				a := &graphArray{A: [4]int{10, 20, 30, 40}}
+				a.P = &a.A[2]
+				return a
+			}(),
+			nil,
+			func(_, actual any) bool {
+				out := actual.(*graphArray)
+				return out.P != nil && *out.P == 30 && out.P == &out.A[2]
+			},
+		},
 	}
 	runTests(items, reg, t)
 }
@@ -2742,6 +2959,62 @@ func Test_MixedContainerPointers(t *testing.T) {
 			}(),
 			nil,
 			nil,
+		},
+		// #9
+		{
+			func() any {
+				n1 := &graphNode{Value: 1}
+				n2 := &graphNode{Value: 2}
+				n3 := &graphNode{Value: 3}
+				base := []any{n1, n2, n3}
+				sub := base[1:3]
+				m := map[string]any{
+					"root":  n1,
+					"base":  base,
+					"sub":   sub,
+					"n2":    n2,
+					"again": n2,
+				}
+				n1.Next = n2
+				n2.Next = n3
+				n3.Next = n1
+				n1.Any = m
+				n2.Any = sub
+				return graphMixed{
+					Node:  n1,
+					Items: base,
+					Table: m,
+					Box:   n2,
+				}
+			}(),
+			nil,
+			func(expected, actual any) bool {
+				if !defaultEq(expected, actual) {
+					return false
+				}
+				g := actual.(graphMixed)
+				if g.Node != g.Items[0].(*graphNode) {
+					return false
+				}
+				if g.Box.(*graphNode) != g.Items[1].(*graphNode) {
+					return false
+				}
+				if g.Table["again"].(*graphNode) != g.Table["n2"].(*graphNode) {
+					return false
+				}
+				if g.Node.Next.Next.Next != g.Node {
+					return false
+				}
+				g.Items[1].(*graphNode).Value = 900
+				if g.Table["n2"].(*graphNode).Value != 900 {
+					return false
+				}
+				sub2 := g.Table["sub"].([]any)
+				if sub2[0].(*graphNode) != g.Items[1].(*graphNode) {
+					return false
+				}
+				return true
+			},
 		},
 	}
 	runTests(items, reg, t)

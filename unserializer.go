@@ -26,6 +26,7 @@ type Unserializer struct {
 	data         []byte
 	values       []reflect.Value
 	slices       map[int][]sliceExp
+	refs         map[int][]int
 	maps         map[int][]int
 }
 
@@ -33,6 +34,7 @@ func NewUnserializer() *Unserializer {
 	return &Unserializer{
 		typeRegistry: GetDefaultTypeRegistry(),
 		slices:       make(map[int][]sliceExp),
+		refs:         make(map[int][]int),
 		maps:         make(map[int][]int),
 	}
 }
@@ -57,6 +59,7 @@ func (u *Unserializer) clear() {
 	u.id = 0
 	u.pos = 1 // skip version for now
 	u.values = nil
+	clear(u.refs)
 	clear(u.slices)
 	clear(u.maps)
 }
@@ -65,11 +68,11 @@ func (u *Unserializer) Decode(data []byte) (value any, err error) {
 	if data == nil {
 		return nil, io.ErrUnexpectedEOF
 	}
-	//defer func() {
-	//	if e := recover(); e != nil {
-	//		err = fmt.Errorf("%s", e)
-	//	}
-	//}()
+	defer func() {
+		if e := recover(); e != nil {
+			err = fmt.Errorf("%s", e)
+		}
+	}()
 	u.clear()
 	u.data = data
 	u.size = len(data)
@@ -85,6 +88,7 @@ func (u *Unserializer) decode() reflect.Value {
 	}
 	u.restoreSlices()
 	u.restorePointers()
+	u.restoreReferences()
 	u.restoreMaps()
 	return u.values[0]
 }
@@ -378,12 +382,8 @@ func (u *Unserializer) decodeSliceExp(capUsed bool) {
 	if capUsed {
 		k = u.decodeLength()
 	}
-	id := len(u.values) - 1
-	if u.values[id-1].Kind() == reflect.Interface {
-		id--
-	}
 	u.slices[parentId] = append(u.slices[parentId], sliceExp{
-		id: id,
+		id: u.parentId(len(u.values) - 1),
 		i:  i,
 		j:  j,
 		k:  k,
@@ -446,7 +446,20 @@ func (u *Unserializer) decodeContainer(containerType reflect.Type, containerValu
 
 func (u *Unserializer) decodeReference(v reflect.Value) {
 	_ = u.readByte()
-	v.Set(u.values[u.decodeId()])
+	ref := u.decodeId()
+	id := len(u.values)
+	if ref >= id {
+		u.refs[ref] = append(u.refs[ref], u.parentId(id-1))
+		return
+	}
+	v.Set(u.values[ref])
+}
+
+func (u *Unserializer) parentId(id int) int {
+	if u.values[id-1].Kind() == reflect.Interface {
+		return id - 1
+	}
+	return id
 }
 
 func (u *Unserializer) restoreSlices() {
@@ -471,6 +484,15 @@ func (u *Unserializer) restorePointers() {
 		for u.topIsNotRef() {
 			ptr := u.values[u.decodeId()]
 			ptr.Set(reflex.PtrAt(v.Type(), v))
+		}
+	}
+}
+
+func (u *Unserializer) restoreReferences() {
+	for ref, ids := range u.refs {
+		v := u.values[ref]
+		for _, id := range ids {
+			u.values[id].Set(v)
 		}
 	}
 }

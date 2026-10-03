@@ -180,6 +180,9 @@ Version 1 has the following limitations:
 
 - `unsafe.Pointer` cannot be restored correctly after deserialization.
 - `uintptr` cannot be restored correctly after deserialization.
+- A string and a slice, or two slices, that share backing storage but have
+  different element types (for example, when created with `unsafe.Pointer`)
+  are not supported.
 - Values from channels are not serialized in this version. Full channel support is
   planned for the next version.
 

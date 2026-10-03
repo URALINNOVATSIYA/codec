@@ -161,7 +161,7 @@ func (s *Serializer) addReference(v reflect.Value, id int) int {
 		return -1
 	}
 	if ref, exists := s.addresses[addr]; exists {
-		s.setReference(id, ref)
+		s.refs[id] = ref
 		return ref
 	}
 	s.addresses[addr] = id
@@ -176,27 +176,8 @@ func (s *Serializer) addSlice(v reflect.Value, id int) (*reflex.Slice, bool) {
 	if id == slice.Id {
 		return slice, true
 	}
-	s.setReference(id, slice.Id)
+	s.refs[id] = slice.Id
 	return slice, false
-}
-
-func (s *Serializer) setReference(id, ref int) {
-	if s.parents[ref] != -1 || s.parents[id] == -1 {
-		s.refs[id] = ref
-		return
-	}
-	pid := s.parents[id]
-	delete(s.parents, id)
-	s.parents[ref] = pid
-	s.childs[-1] = slices.DeleteFunc(s.childs[-1], func(i int) bool {
-		return i == ref
-	})
-	for i, childId := range s.childs[pid] {
-		if childId == id {
-			s.childs[pid][i] = ref
-			break
-		}
-	}
 }
 
 func (s *Serializer) visit(v reflect.Value, parentId, parentContainerId int) {
@@ -223,6 +204,9 @@ func (s *Serializer) visit(v reflect.Value, parentId, parentContainerId int) {
 
 func (s *Serializer) visitList(v reflect.Value, id int) {
 	if v.Kind() == reflect.Slice && v.IsNil() {
+		return
+	}
+	if v.Kind() == reflect.Slice && v.Cap() == 0 {
 		return
 	}
 	slice, new := s.addSlice(v, id)
@@ -562,6 +546,11 @@ func (s *Serializer) encodeSlice(v reflect.Value, id int) []byte {
 	if v.IsNil() {
 		return []byte{meta_slice | meta_nil}
 	}
+	if v.Cap() == 0 {
+		b := []byte{meta_slice}
+		b = append(b, c2b(v.Len())...)
+		return append(b, c2b(v.Cap())...)
+	}
 	if ref, exists := s.refs[id]; exists {
 		if s.slices.Get(ref).Parent == nil {
 			return s.encodeReference(ref)
@@ -580,8 +569,8 @@ func (s *Serializer) encodeSlice(v reflect.Value, id int) []byte {
 		b = append(b, c2b(k)...)
 		return b
 	}
-	b = append(b, c2b(slice.Len())...)
-	b = append(b, c2b(slice.Cap())...)
+	b = append(b, c2b(v.Len())...)
+	b = append(b, c2b(v.Cap())...)
 	for _, containerId := range s.childs[id] {
 		b = append(b, s.encodeValue(s.childs[containerId][0])...)
 	}
