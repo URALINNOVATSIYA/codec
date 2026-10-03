@@ -2121,7 +2121,10 @@ func Test_Slice(t *testing.T) {
 				S []int
 			}{make([]int, 0, 17)},
 			nil,
-			func(_, actual any) bool {
+			func(expected, actual any) bool {
+				if !defaultEq(expected, actual) {
+					return false
+				}
 				s := actual.(struct {
 					S []int
 				}).S
@@ -2139,6 +2142,110 @@ func Test_Slice(t *testing.T) {
 			testRecSlice{testRecSlice{nil, testRecSlice{}}, nil, testRecSlice{}},
 			nil,
 			nil,
+		},
+		// #12
+		{
+			func() any {
+				a := [3]int{1, 2, 3}
+				return struct {
+					A []int
+					B [3]int
+				}{
+					A: a[:],
+					B: a,
+				}
+			}(),
+			nil,
+			func(expected, actual any) bool {
+				if !defaultEq(expected, actual) {
+					return false
+				}
+				s := actual.(struct {
+					A []int
+					B [3]int
+				})
+				s.B[0] = 100
+				return s.A[0] != 100
+			},
+		},
+		// #13
+		{
+			func() any {
+				v := struct {
+					A [3]int
+					S []int
+				}{}
+				v.A = [3]int{1, 2, 3}
+				v.S = v.A[:]
+				return &v
+			}(),
+			nil,
+			func(expected, actual any) bool {
+				if !defaultEq(expected, actual) {
+					return false
+				}
+				v := actual.(*struct {
+					A [3]int
+					S []int
+				})
+				v.A[0] = 100
+				return v.S[0] == 100
+			},
+		},
+		// #14
+		{
+			func() any {
+				base := make([]struct{}, 10)
+				return [2]any{base, base[2:5]}
+			}(),
+			nil,
+			func(_, actual any) bool {
+				slices := actual.([2]any)
+				first := slices[0].([]struct{})
+				second := slices[1].([]struct{})
+				return len(first) == 10 && cap(first) == 10 &&
+					len(second) == 3 && cap(second) == 8
+			},
+		},
+		// #15
+		{
+			func() any {
+				words := []uint32{0x11223344, 0x55667788}
+				bytes := unsafe.Slice((*byte)(unsafe.Pointer(unsafe.SliceData(words))), len(words)*4)
+				return [2]any{words, bytes}
+			}(),
+			nil,
+			func(expected, actual any) bool {
+				if !defaultEq(expected, actual) {
+					return false
+				}
+				values := actual.([2]any)
+				words := values[0].([]uint32)
+				bytes := values[1].([]byte)
+				firstWord := words[0]
+				bytes[0] ^= 0xff
+				return words[0] == firstWord
+			},
+		},
+		// #16
+		{
+			func() any {
+				words := [2]uint32{0x11223344, 0x55667788}
+				bytes := (*[8]byte)(unsafe.Pointer(&words[0]))
+				return [2]any{&words, bytes}
+			}(),
+			nil,
+			func(expected, actual any) bool {
+				if !defaultEq(expected, actual) {
+					return false
+				}
+				values := actual.([2]any)
+				words := values[0].(*[2]uint32)
+				bytes := values[1].(*[8]byte)
+				firstByte := bytes[0]
+				words[0] ^= 0xffffffff
+				return bytes[0] == firstByte
+			},
 		},
 	}
 	runTests(items, reg, t)

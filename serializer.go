@@ -203,10 +203,7 @@ func (s *Serializer) visit(v reflect.Value, parentId, parentContainerId int) {
 }
 
 func (s *Serializer) visitList(v reflect.Value, id int) {
-	if v.Kind() == reflect.Slice && v.IsNil() {
-		return
-	}
-	if v.Kind() == reflect.Slice && v.Cap() == 0 {
+	if v.Kind() == reflect.Slice && (v.IsNil() || v.Cap() == 0) {
 		return
 	}
 	slice, new := s.addSlice(v, id)
@@ -218,6 +215,10 @@ func (s *Serializer) visitList(v reflect.Value, id int) {
 	for i := range v.Len() {
 		elem := v.Index(i)
 		containerId := s.addNode(id, elem)
+		if elemsize == 0 {
+			s.visit(elem, containerId, containerId)
+			continue
+		}
 		if s.addListElem(ptr, slice.ElemType, containerId) {
 			if proceed := s.addContainer(elem, containerId); proceed {
 				s.visit(elem, containerId, containerId)
@@ -295,6 +296,9 @@ func (s *Serializer) visitSlices() {
 			s.visit(p.V, -1, -1)
 		}
 		if p.V.Kind() == reflect.String {
+			continue
+		}
+		if p.ElemSize() == 0 {
 			continue
 		}
 		pchilds := s.childs[p.Id]

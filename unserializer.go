@@ -57,7 +57,7 @@ func (u *Unserializer) WithTypeRegistry(registry *TypeRegistry) *Unserializer {
 
 func (u *Unserializer) clear() {
 	u.id = 0
-	u.pos = 1 // skip version for now
+	u.pos = 0
 	u.values = nil
 	clear(u.refs)
 	clear(u.slices)
@@ -76,6 +76,9 @@ func (u *Unserializer) Decode(data []byte) (value any, err error) {
 	u.clear()
 	u.data = data
 	u.size = len(data)
+	if u.readByte() != version {
+		return nil, fmt.Errorf("serializer version %d is not supported", version)
+	}
 	if v := u.decode(); v.IsValid() {
 		return v.Interface(), nil
 	}
