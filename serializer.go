@@ -74,7 +74,6 @@ func (s *Serializer) WithTypeRegistry(registry *TypeRegistry) *Serializer {
 }
 
 func (s *Serializer) clear() {
-	s.values = nil
 	s.slices.Clear()
 	clear(s.containers)
 	clear(s.addresses)
@@ -84,6 +83,8 @@ func (s *Serializer) clear() {
 	clear(s.ptrs)
 	clear(s.refs)
 	clear(s.imap)
+	clear(s.values)
+	s.values = s.values[:0]
 }
 
 func (s *Serializer) Encode(v any) []byte {
@@ -96,9 +97,10 @@ func (s *Serializer) encode(v reflect.Value) []byte {
 	s.visit(v, -1, -1)
 	s.visitSlices()
 	s.renumberGraph(-1)
-	b := []byte{version}
-	b = append(b, s.encodeValues()...)
-	b = append(b, s.encodePtrs()...)
+	b := make([]byte, 1, min(max(1, len(s.values)<<1), 4096))
+	b[0] = version
+	b = s.encodeValues(b)
+	b = s.encodePtrs(b)
 	return b
 }
 
@@ -329,294 +331,290 @@ func (s *Serializer) renumberGraph(parentId int) {
 	}
 }
 
-func (s *Serializer) encodeValues() []byte {
-	var b []byte
+func (s *Serializer) encodeValues(b []byte) []byte {
 	for _, id := range s.childs[-1] {
-		b = append(b, s.encodeNode(id)...)
+		b = s.encodeNode(b, id)
 	}
 	return b
 }
 
-func (s *Serializer) encodeNode(id int) []byte {
-	b := s.encodeType(s.values[id])
-	return append(b, s.encodeValue(id)...)
+func (s *Serializer) encodeNode(b []byte, id int) []byte {
+	b = u2bs(b, uint64(s.typeRegistry.typeIdByValue(s.values[id])), 3)
+	return s.encodeValue(b, id)
 }
 
-func (s *Serializer) encodeType(v reflect.Value) []byte {
-	return u2bs(uint64(s.typeRegistry.typeIdByValue(v)), 3)
-}
-
-func (s *Serializer) encodeValue(id int) []byte {
+func (s *Serializer) encodeValue(b []byte, id int) []byte {
 	v := s.values[id]
 	if isSerializableValue(v) {
-		return s.encodeSerializable(v, id)
+		return s.encodeSerializable(b, v, id)
 	}
 	switch v.Kind() {
 	case reflect.Invalid:
-		return s.encodeNil()
+		return s.encodeNil(b)
 	case reflect.Bool:
-		return s.encodeBool(v)
-	case reflect.String:
-		return s.encodeString(v, id)
+		return s.encodeBool(b, v)
 	case reflect.Uint8:
-		return s.encodeUint8(v)
+		return s.encodeUint8(b, v)
 	case reflect.Int8:
-		return s.encodeInt8(v)
+		return s.encodeInt8(b, v)
 	case reflect.Uint16:
-		return s.encodeUint16(v)
+		return s.encodeUint16(b, v)
 	case reflect.Int16:
-		return s.encodeInt16(v)
+		return s.encodeInt16(b, v)
 	case reflect.Uint32:
-		return s.encodeUint32(v)
+		return s.encodeUint32(b, v)
 	case reflect.Int32:
-		return s.encodeInt32(v)
+		return s.encodeInt32(b, v)
 	case reflect.Uint64:
-		return s.encodeUint64(v)
+		return s.encodeUint64(b, v)
 	case reflect.Int64:
-		return s.encodeInt(v)
+		return s.encodeInt64(b, v)
 	case reflect.Uint:
-		return s.encodeUint(v)
+		return s.encodeUint(b, v)
 	case reflect.Int:
-		return s.encodeInt(v)
+		return s.encodeInt(b, v)
 	case reflect.Float32:
-		return s.encodeFloat32(v)
+		return s.encodeFloat32(b, v)
 	case reflect.Float64:
-		return s.encodeFloat64(v)
+		return s.encodeFloat64(b, v)
 	case reflect.Complex64:
-		return s.encodeComplex64(v)
+		return s.encodeComplex64(b, v)
 	case reflect.Complex128:
-		return s.encodeComplex128(v)
+		return s.encodeComplex128(b, v)
 	case reflect.Uintptr:
-		return s.encodeUintptr(v)
+		return s.encodeUintptr(b, v)
 	case reflect.UnsafePointer:
-		return s.encodeUnsafePointer(v)
+		return s.encodeUnsafePointer(b, v)
 	case reflect.Chan:
-		return s.encodeChan(v, id)
+		return s.encodeChan(b, v, id)
 	case reflect.Func:
-		return s.encodeFunc(v, id)
+		return s.encodeFunc(b, v, id)
+	case reflect.String:
+		return s.encodeString(b, v, id)
 	case reflect.Array:
-		return s.encodeArray(id)
+		return s.encodeArray(b, id)
 	case reflect.Slice:
-		return s.encodeSlice(v, id)
+		return s.encodeSlice(b, v, id)
 	case reflect.Map:
-		return s.encodeMap(v, id)
+		return s.encodeMap(b, v, id)
 	case reflect.Struct:
-		return s.encodeStruct(v, id)
+		return s.encodeStruct(b, v, id)
 	case reflect.Interface:
-		return s.encodeInterface(id)
+		return s.encodeInterface(b, id)
 	case reflect.Pointer:
-		return s.encodePointer(v)
+		return s.encodePointer(b, v)
 	}
 	panic("unrecognized value kind")
 }
 
-func (s *Serializer) encodeSerializable(v reflect.Value, id int) []byte {
+func (s *Serializer) encodeSerializable(b []byte, v reflect.Value, id int) []byte {
 	switch v.Kind() {
 	case reflect.Interface,
 		reflect.Map, reflect.Slice,
 		reflect.Pointer, reflect.UnsafePointer,
 		reflect.Chan, reflect.Func:
 		if v.IsNil() {
-			return s.encodeNil()
+			return s.encodeNil(b)
 		}
 		if ref := s.addReference(v, id); ref >= 0 {
-			return s.encodeReference(ref)
+			return s.encodeReference(b, ref)
 		}
 	}
 	body := v.MethodByName("Serialize").Call(nil)[0].Interface().([]byte)
-	b := append([]byte{meta_nonil}, c2b(len(body))...)
+	b = append(b, meta_nonil)
+	b = c2b(b, len(body))
 	return append(b, body...)
 }
 
-func (s *Serializer) encodeNil() []byte {
-	return []byte{meta_nil}
+func (s *Serializer) encodeNil(b []byte) []byte {
+	return append(b, meta_nil)
 }
 
-func (s *Serializer) encodeBool(v reflect.Value) []byte {
+func (s *Serializer) encodeBool(b []byte, v reflect.Value) []byte {
 	if v.Bool() {
-		return []byte{meta_tru}
+		return append(b, meta_tru)
 	}
-	return []byte{meta_fls}
+	return append(b, meta_fls)
 }
 
-func (s *Serializer) encodeUint8(v reflect.Value) []byte {
-	return []byte{uint8(v.Uint())}
+func (s *Serializer) encodeUint8(b []byte, v reflect.Value) []byte {
+	return append(b, uint8(v.Uint()))
 }
 
-func (s *Serializer) encodeInt8(v reflect.Value) []byte {
-	return []byte{uint8(i2u(v.Int()))}
+func (s *Serializer) encodeInt8(b []byte, v reflect.Value) []byte {
+	return append(b, uint8(i2u(v.Int())))
 }
 
-func (s *Serializer) encodeUint16(v reflect.Value) []byte {
-	return u2bs(v.Uint(), 2)
+func (s *Serializer) encodeUint16(b []byte, v reflect.Value) []byte {
+	return u2bs(b, v.Uint(), 2)
 }
 
-func (s *Serializer) encodeInt16(v reflect.Value) []byte {
-	return u2bs(i2u(v.Int()), 2)
+func (s *Serializer) encodeInt16(b []byte, v reflect.Value) []byte {
+	return u2bs(b, i2u(v.Int()), 2)
 }
 
-func (s *Serializer) encodeUint32(v reflect.Value) []byte {
-	return u2bs(v.Uint(), 3)
+func (s *Serializer) encodeUint32(b []byte, v reflect.Value) []byte {
+	return u2bs(b, v.Uint(), 3)
 }
 
-func (s *Serializer) encodeInt32(v reflect.Value) []byte {
-	return u2bs(i2u(v.Int()), 3)
+func (s *Serializer) encodeInt32(b []byte, v reflect.Value) []byte {
+	return u2bs(b, i2u(v.Int()), 3)
 }
 
-func (s *Serializer) encodeUint64(v reflect.Value) []byte {
-	return u2bs(v.Uint(), 4)
+func (s *Serializer) encodeUint64(b []byte, v reflect.Value) []byte {
+	return u2bs(b, v.Uint(), 4)
 }
 
-func (s *Serializer) encodeInt64(v reflect.Value) []byte {
-	return u2bs(i2u(v.Int()), 4)
+func (s *Serializer) encodeInt64(b []byte, v reflect.Value) []byte {
+	return u2bs(b, i2u(v.Int()), 4)
 }
 
-func (s *Serializer) encodeUint(v reflect.Value) []byte {
-	return s.encodeUint64(v)
+func (s *Serializer) encodeUint(b []byte, v reflect.Value) []byte {
+	return s.encodeUint64(b, v)
 }
 
-func (s *Serializer) encodeInt(v reflect.Value) []byte {
-	return s.encodeInt64(v)
+func (s *Serializer) encodeInt(b []byte, v reflect.Value) []byte {
+	return s.encodeInt64(b, v)
 }
 
-func (s *Serializer) encodeFloat32(v reflect.Value) []byte {
-	return u2bs(uint64(bits.ReverseBytes32(math.Float32bits(float32(v.Float())))), 3)
+func (s *Serializer) encodeFloat32(b []byte, v reflect.Value) []byte {
+	return u2bs(b, uint64(bits.ReverseBytes32(math.Float32bits(float32(v.Float())))), 3)
 }
 
-func (s *Serializer) encodeFloat64(v reflect.Value) []byte {
-	return u2bs(bits.ReverseBytes64(math.Float64bits(v.Float())), 4)
+func (s *Serializer) encodeFloat64(b []byte, v reflect.Value) []byte {
+	return u2bs(b, bits.ReverseBytes64(math.Float64bits(v.Float())), 4)
 }
 
-func (s *Serializer) encodeComplex64(v reflect.Value) []byte {
+func (s *Serializer) encodeComplex64(b []byte, v reflect.Value) []byte {
 	c := v.Complex()
-	r := s.encodeFloat32(reflect.ValueOf(float32(real(c))))
-	i := s.encodeFloat32(reflect.ValueOf(float32(imag(c))))
-	return append(r, i...)
+	b = s.encodeFloat32(b, reflect.ValueOf(float32(real(c))))
+	return s.encodeFloat32(b, reflect.ValueOf(float32(imag(c))))
 }
 
-func (s *Serializer) encodeComplex128(v reflect.Value) []byte {
+func (s *Serializer) encodeComplex128(b []byte, v reflect.Value) []byte {
 	c := v.Complex()
-	r := s.encodeFloat64(reflect.ValueOf(real(c)))
-	i := s.encodeFloat64(reflect.ValueOf(imag(c)))
-	return append(r, i...)
+	b = s.encodeFloat64(b, reflect.ValueOf(real(c)))
+	return s.encodeFloat64(b, reflect.ValueOf(imag(c)))
 }
 
-func (s *Serializer) encodeUintptr(v reflect.Value) []byte {
-	return s.encodeUint64(v)
+func (s *Serializer) encodeUintptr(b []byte, v reflect.Value) []byte {
+	return s.encodeUint64(b, v)
 }
 
-func (s *Serializer) encodeUnsafePointer(v reflect.Value) []byte {
-	return u2bs(uint64(v.Pointer()), 4)
+func (s *Serializer) encodeUnsafePointer(b []byte, v reflect.Value) []byte {
+	return u2bs(b, uint64(v.Pointer()), 4)
 }
 
-func (s *Serializer) encodeChan(v reflect.Value, id int) []byte {
+func (s *Serializer) encodeChan(b []byte, v reflect.Value, id int) []byte {
 	if v.IsNil() {
-		return s.encodeNil()
+		return s.encodeNil(b)
 	}
 	if ref, exists := s.refs[id]; exists {
-		return s.encodeReference(ref)
+		return s.encodeReference(b, ref)
 	}
-	return append([]byte{meta_nonil}, c2b(v.Cap())...)
+	b = append(b, meta_nonil)
+	return c2b(b, v.Cap())
 }
 
-func (s *Serializer) encodeFunc(v reflect.Value, id int) []byte {
+func (s *Serializer) encodeFunc(b []byte, v reflect.Value, id int) []byte {
 	if v.IsNil() {
-		return s.encodeNil()
+		return s.encodeNil(b)
 	}
 	if ref, exists := s.refs[id]; exists {
-		return s.encodeReference(ref)
+		return s.encodeReference(b, ref)
 	}
-	return append([]byte{meta_nonil}, u2bs(uint64(s.typeRegistry.funcIdByValue(v)), 3)...)
+	b = append(b, meta_nonil)
+	return u2bs(b, uint64(s.typeRegistry.funcIdByValue(v)), 3)
 }
 
-func (s *Serializer) encodeString(v reflect.Value, id int) []byte {
+func (s *Serializer) encodeString(b []byte, v reflect.Value, id int) []byte {
 	if ref, exists := s.refs[id]; exists {
 		if s.slices.Get(ref).Parent == nil {
-			return s.encodeReference(ref)
+			return s.encodeReference(b, ref)
 		}
 		id = ref
 	}
 	slice := s.slices.Get(id)
 	if slice.Parent == nil {
-		return append(i2b(v.Len()), v.String()...)
+		return append(i2b(b, v.Len()), v.String()...)
 	}
 	p := slice.Parent
-	b := i2b(-1)
-	b = append(b, i2b(s.imap[p.Id])...)
+	b = i2b(b, -1)
+	b = i2b(b, s.imap[p.Id])
 	i, j, _ := p.SliceOf(slice)
-	b = append(b, c2b(i)...)
-	b = append(b, c2b(j)...)
+	b = c2b(b, i)
+	b = c2b(b, j)
 	return b
 }
 
-func (s *Serializer) encodeSlice(v reflect.Value, id int) []byte {
+func (s *Serializer) encodeSlice(b []byte, v reflect.Value, id int) []byte {
 	if v.IsNil() {
-		return []byte{meta_slice | meta_nil}
+		return append(b, meta_slice|meta_nil)
 	}
 	if v.Cap() == 0 {
-		b := []byte{meta_slice}
-		b = append(b, c2b(v.Len())...)
-		return append(b, c2b(v.Cap())...)
+		b = append(b, meta_slice)
+		b = c2b(b, v.Len())
+		return c2b(b, v.Cap())
 	}
 	if ref, exists := s.refs[id]; exists {
 		if s.slices.Get(ref).Parent == nil {
-			return s.encodeReference(ref)
+			return s.encodeReference(b, ref)
 		}
 		id = ref
 	}
-	b := []byte{meta_slice}
+	b = append(b, meta_slice)
 	slice := s.slices.Get(id)
 	if slice.Parent != nil {
-		b[0] |= meta_sexp
+		b[len(b)-1] |= meta_sexp
 		p := slice.Parent
-		b = append(b, i2b(s.imap[p.Id])...)
+		b = i2b(b, s.imap[p.Id])
 		i, j, k := p.SliceOf(slice)
-		b = append(b, c2b(i)...)
-		b = append(b, c2b(j)...)
-		b = append(b, c2b(k)...)
+		b = c2b(b, i)
+		b = c2b(b, j)
+		b = c2b(b, k)
 		return b
 	}
-	b = append(b, c2b(v.Len())...)
-	b = append(b, c2b(v.Cap())...)
+	b = c2b(b, v.Len())
+	b = c2b(b, v.Cap())
 	for _, containerId := range s.childs[id] {
-		b = append(b, s.encodeValue(s.childs[containerId][0])...)
+		b = s.encodeValue(b, s.childs[containerId][0])
 	}
 	return b
 }
 
-func (s *Serializer) encodeMap(v reflect.Value, id int) []byte {
+func (s *Serializer) encodeMap(b []byte, v reflect.Value, id int) []byte {
 	if v.IsNil() {
-		return s.encodeNil()
+		return s.encodeNil(b)
 	}
 	if ref, exists := s.refs[id]; exists {
-		return s.encodeReference(ref)
+		return s.encodeReference(b, ref)
 	}
-	b := append([]byte{meta_nonil}, c2b(v.Len())...)
+	b = append(b, meta_nonil)
+	b = c2b(b, v.Len())
 	for _, childId := range s.childs[id] {
-		b = append(b, s.encodeValue(childId)...)
+		b = s.encodeValue(b, childId)
 	}
 	return b
 }
 
-func (s *Serializer) encodeArray(id int) []byte {
-	var b []byte
+func (s *Serializer) encodeArray(b []byte, id int) []byte {
 	for _, containerId := range s.childs[id] {
-		b = append(b, s.encodeValue(s.childs[containerId][0])...)
+		b = s.encodeValue(b, s.childs[containerId][0])
 	}
 	return b
 }
 
-func (s *Serializer) encodeStruct(v reflect.Value, id int) []byte {
-	b := []byte{meta_strc}
+func (s *Serializer) encodeStruct(b []byte, v reflect.Value, id int) []byte {
+	b = append(b, meta_strc)
 	tags := s.typeRegistry.tagsByValue(v)
 	if len(tags) == 0 {
 		for _, containerId := range s.childs[id] {
-			b = append(b, s.encodeValue(s.childs[containerId][0])...)
+			b = s.encodeValue(b, s.childs[containerId][0])
 		}
 		return b
 	}
-	b[0] |= meta_tags
-	b = append(b, c2b(len(s.childs[id]))...)
+	b[len(b)-1] |= meta_tags
+	b = c2b(b, len(s.childs[id]))
 	childIndex := 0
 	for fieldIndex := range v.NumField() {
 		tag, exists := tags[fieldIndex]
@@ -624,35 +622,35 @@ func (s *Serializer) encodeStruct(v reflect.Value, id int) []byte {
 			continue
 		}
 		containerId := s.childs[id][childIndex]
-		b = append(b, c2b(tag.Id)...)
-		b = append(b, s.encodeValue(s.childs[containerId][0])...)
+		b = c2b(b, tag.Id)
+		b = s.encodeValue(b, s.childs[containerId][0])
 		childIndex++
 	}
 	return b
 }
 
-func (s *Serializer) encodeInterface(id int) []byte {
-	return s.encodeNode(s.childs[id][0])
+func (s *Serializer) encodeInterface(b []byte, id int) []byte {
+	return s.encodeNode(b, s.childs[id][0])
 }
 
-func (s *Serializer) encodePointer(v reflect.Value) []byte {
+func (s *Serializer) encodePointer(b []byte, v reflect.Value) []byte {
 	if v.IsNil() {
-		return []byte{meta_nil}
+		return s.encodeNil(b)
 	}
-	return []byte{meta_nonil}
+	return append(b, meta_nonil)
 }
 
-func (s *Serializer) encodeReference(id int) []byte {
-	return append([]byte{meta_ref}, c2b(s.imap[id])...)
+func (s *Serializer) encodeReference(b []byte, id int) []byte {
+	b = append(b, meta_ref)
+	return c2b(b, s.imap[id])
 }
 
-func (s *Serializer) encodePtrs() []byte {
-	var b []byte
+func (s *Serializer) encodePtrs(b []byte) []byte {
 	for ptrValueId, ptrIds := range s.ptrs {
 		b = append(b, meta_ref)
-		b = append(b, c2b(s.imap[ptrValueId])...)
+		b = c2b(b, s.imap[ptrValueId])
 		for _, ptrId := range ptrIds {
-			b = append(b, c2b(s.imap[ptrId])...)
+			b = c2b(b, s.imap[ptrId])
 		}
 	}
 	return b

@@ -5,19 +5,19 @@ import (
 )
 
 func i2b0(v int) byte {
-	return u2bs(i2u(int64(v)), 4)[0]
-}
-
-func i2b(v int) []byte {
-	return u2bs(i2u(int64(v)), 4)
+	return u2bs(nil, i2u(int64(v)), 4)[0]
 }
 
 func c2b0(v int) byte {
-	return c2b(v)[0]
+	return c2b(nil, v)[0]
 }
 
-func c2b(v int) []byte {
-	return u2bs(uint64(v), 4)
+func i2b(b []byte, v int) []byte {
+	return u2bs(b, i2u(int64(v)), 4)
+}
+
+func c2b(b []byte, v int) []byte {
+	return u2bs(b, uint64(v), 4)
 }
 
 func bs2u(b []byte, sizeBits int) (v uint64, length int) {
@@ -38,12 +38,22 @@ func bs2u(b []byte, sizeBits int) (v uint64, length int) {
 
 // u2bs (uint64 to bytes with size) returns the minimum byte representation of
 // v with byte size info in big endian
-func u2bs(v uint64, sizeBits int) []byte {
+func u2bs(b []byte, v uint64, sizeBits int) []byte {
 	valueByteCount, totalByteCount := byteCount(v, sizeBits)
 	if totalByteCount > valueByteCount {
-		return append([]byte{byte(totalByteCount << (8 - sizeBits))}, u2b(v, valueByteCount)...)
+		b = append(b, byte(totalByteCount<<(8-sizeBits)))
+		return u2b(b, v, valueByteCount)
 	}
-	return u2b(v|uint64(totalByteCount<<(8*totalByteCount-sizeBits)), totalByteCount)
+	return u2b(b, v|uint64(totalByteCount<<(8*totalByteCount-sizeBits)), totalByteCount)
+}
+
+// u2b (uint64 to bytes) returns the v's byte representation of the given size in big endian
+func u2b(b []byte, v uint64, size int) []byte {
+	for i := 0; size > 0; i++ {
+		size--
+		b = append(b, byte(v>>(size<<3)))
+	}
+	return b
 }
 
 func byteCount(v uint64, metaBitCount int) (valueByteCount int, totalByteCount int) {
@@ -63,16 +73,6 @@ func byteCount(v uint64, metaBitCount int) (valueByteCount int, totalByteCount i
 		totalByteCount = bitCount>>3 + 1
 	}
 	return
-}
-
-// u2b (uint64 to bytes) returns the v's byte representation of the given size in big endian
-func u2b(v uint64, size int) []byte {
-	bytes := make([]byte, size)
-	for i := 0; size > 0; i++ {
-		size--
-		bytes[i] = byte(v >> (size << 3))
-	}
-	return bytes
 }
 
 func b2u(bytes []byte) uint64 {

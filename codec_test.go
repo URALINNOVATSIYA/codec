@@ -84,7 +84,7 @@ func registry() (*TypeRegistry, func(v any) byte) {
 	reg := NewTypeRegistry(true)
 	return reg, func(v any) byte {
 		id := reg.typeIdByValue(reflect.ValueOf(v))
-		return u2bs(uint64(id), 3)[0]
+		return u2bs(nil, uint64(id), 3)[0]
 	}
 }
 
@@ -92,11 +92,11 @@ func registryWithFuncId() (*TypeRegistry, func(v any) byte, func(v any) byte) {
 	reg := NewTypeRegistry(true)
 	return reg, func(v any) byte {
 			id := reg.typeIdByValue(reflect.ValueOf(v))
-			return u2bs(uint64(id), 3)[0]
+			return u2bs(nil, uint64(id), 3)[0]
 		},
 		func(v any) byte {
 			id := reg.funcIdByValue(reflect.ValueOf(v))
-			return u2bs(uint64(id), 3)[0]
+			return u2bs(nil, uint64(id), 3)[0]
 		}
 }
 
@@ -151,19 +151,19 @@ func Test_String(t *testing.T) {
 		// #2
 		{
 			"0123456789",
-			[]byte{version, typeId(""), i2b(10)[0], i2b(10)[1], '0', '1', '2', '3', '4', '5', '6', '7', '8', '9'},
+			[]byte{version, typeId(""), i2b(nil, 10)[0], i2b(nil, 10)[1], '0', '1', '2', '3', '4', '5', '6', '7', '8', '9'},
 			nil,
 		},
 		// #3
 		{
 			strings.Repeat("a", 255),
-			append(append([]byte{version, typeId("")}, i2b(255)...), []byte(strings.Repeat("a", 255))...),
+			append(append([]byte{version, typeId("")}, i2b(nil, 255)...), []byte(strings.Repeat("a", 255))...),
 			nil,
 		},
 		// #4
 		{
 			strings.Repeat("a", 65536),
-			append(append([]byte{version, typeId("")}, i2b(65536)...), []byte(strings.Repeat("a", 65536))...),
+			append(append([]byte{version, typeId("")}, i2b(nil, 65536)...), []byte(strings.Repeat("a", 65536))...),
 			nil,
 		},
 		// #5
@@ -2065,9 +2065,9 @@ func Test_Slice(t *testing.T) {
 			}(),
 			[]byte{
 				version, typeId([3]any{}),
-				typeId([]byte{}), meta_slice | meta_sexp, i2b(6)[0], c2b0(2), c2b0(4), c2b0(6), // s[2:4]
+				typeId([]byte{}), meta_slice | meta_sexp, i2b0(6), c2b0(2), c2b0(4), c2b0(6), // s[2:4]
 				typeId([]byte{}), meta_slice, c2b0(6), c2b0(6), 1, 2, 3, 4, 5, 6, // s
-				typeId([]byte{}), meta_slice | meta_sexp, i2b(6)[0], c2b0(0), c2b0(3), c2b0(4), // s[0:3:4]
+				typeId([]byte{}), meta_slice | meta_sexp, i2b0(6), c2b0(0), c2b0(3), c2b0(4), // s[0:3:4]
 			},
 			func(expected, actual any) bool {
 				if !defaultEq(expected, actual) {
