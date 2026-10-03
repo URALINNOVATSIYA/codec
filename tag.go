@@ -29,6 +29,7 @@ func ParseTags(t reflect.Type) (TagMap, error) {
 		return nil, nil
 	}
 	m := make(TagMap)
+	ids := make(map[int]string)
 	for field := range t.Fields() {
 		v, exists := field.Tag.Lookup("codec")
 		if !exists {
@@ -41,6 +42,10 @@ func ParseTags(t reflect.Type) (TagMap, error) {
 		if id < 0 {
 			continue
 		}
+		if previous, exists := ids[id]; exists {
+			return nil, fmt.Errorf("invalid codec tag format: identifier %d is used by both %q and %q", id, previous, field.Name)
+		}
+		ids[id] = field.Name
 		m[field.Index[0]] = Tag{
 			Id:         id,
 			Deprecated: deprecated,
@@ -50,19 +55,19 @@ func ParseTags(t reflect.Type) (TagMap, error) {
 }
 
 func parseTagValue(tag string) (id int, deprecated bool, err error) {
-	for _, v := range strings.Split(tag, ",") {
+	for v := range strings.SplitSeq(tag, ",") {
 		v = strings.TrimSpace(v)
 		if v == "deprecated" {
 			deprecated = true
 			continue
 		}
-		if !strings.HasPrefix(v, "id") {
-			continue
-		}
-		parts := strings.Split(v, "=")
+		parts := strings.SplitN(v, "=", 2)
 		if len(parts) < 2 {
 			err = errors.New("invalid codec tag format: identifier is not set")
 			return
+		}
+		if strings.TrimSpace(parts[0]) != "id" {
+			continue
 		}
 		id, err = strconv.Atoi(strings.TrimSpace(parts[1]))
 		if err != nil {

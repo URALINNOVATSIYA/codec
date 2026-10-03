@@ -1,6 +1,7 @@
 package codec
 
 import (
+	"fmt"
 	"reflect"
 	"strconv"
 	"testing"
@@ -108,6 +109,22 @@ func (i testSerializableInt) Serialize() []byte {
 
 func (i testSerializableInt) Unserialize(b []byte) (any, error) {
 	return strconv.Atoi(string(b))
+}
+
+type testSerializableBool bool
+
+func (b *testSerializableBool) Serialize() []byte {
+	if *b {
+		return []byte{1}
+	}
+	return []byte{0}
+}
+
+func (flag *testSerializableBool) Unserialize(data []byte) (any, error) {
+	if len(data) != 1 {
+		return nil, fmt.Errorf("invalid Flag data length: %d", len(data))
+	}
+	return testSerializableBool(data[0] == 1), nil
 }
 
 type testNode struct {

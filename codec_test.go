@@ -218,6 +218,29 @@ func Test_String(t *testing.T) {
 				return a.Text[0] == 'z'
 			},
 		},
+		// #8
+		{
+			func() any {
+				b := []byte("0123456789")
+				s := unsafe.String(unsafe.SliceData(b), len(b))
+				return [3]any{b, s, s[2:7]}
+			}(),
+			nil,
+			func(expected, actual any) bool {
+				if !defaultEq(expected, actual) {
+					return false
+				}
+				a := actual.([3]any)
+				if a[1] != "0123456789" {
+					return false
+				}
+				if a[2] != "23456" {
+					return false
+				}
+				(a[0].([]byte))[2] = 'X'
+				return a[2] == "X3456"
+			},
+		},
 	}
 	runTests(items, reg, t)
 }
@@ -1352,12 +1375,12 @@ func Test_PointersToTheSameValue(t *testing.T) {
 			}(),
 			nil,
 			func(_, actual any) bool {
-				out := actual.(struct {
+				a := actual.(struct {
 					L *graphNode
 					R *graphNode
 				})
-				return out.L != nil && out.R != nil &&
-					out.L.Next == out.R.Next && out.L.Next.Value == 99
+				return a.L != nil && a.R != nil &&
+					a.L.Next == a.R.Next && a.L.Next.Value == 99
 			},
 		},
 		{
@@ -1369,11 +1392,11 @@ func Test_PointersToTheSameValue(t *testing.T) {
 			}(),
 			nil,
 			func(_, actual any) bool {
-				out := actual.(struct {
+				a := actual.(struct {
 					A *struct{}
 					B *struct{}
 				})
-				return out.A != nil && out.B != nil
+				return a.A != nil && a.B != nil
 			},
 		},
 	}
@@ -1578,6 +1601,26 @@ func Test_Interface(t *testing.T) {
 			nil,
 			nil,
 		},
+		// #5
+		{
+			func() any {
+				b := testSerializableBool(true)
+				return &b
+			}(),
+			nil,
+			nil,
+		},
+		// #6
+		{
+			func() any {
+				var x testInterface
+				x = testSerializableInt(111)
+				return x
+			}(),
+			nil,
+			nil,
+		},
+		// #7
 		{
 			func() any {
 				var p *graphNode
@@ -1699,11 +1742,11 @@ func Test_Map(t *testing.T) {
 			}{nil, map[string]int{}},
 			nil,
 			func(_, actual any) bool {
-				out := actual.(struct {
+				a := actual.(struct {
 					Nil   map[string]int
 					Empty map[string]int
 				})
-				return out.Nil == nil && out.Empty != nil
+				return a.Nil == nil && a.Empty != nil
 			},
 		},
 		{
@@ -1781,12 +1824,12 @@ func Test_Array(t *testing.T) {
 			}(),
 			nil,
 			func(_, actual any) bool {
-				out := actual.(struct {
+				a := actual.(struct {
 					A [3]int
 					P *[3]int
 				})
-				out.A[0] = 99
-				return out.P != nil && out.P[0] == 1
+				a.A[0] = 99
+				return a.P != nil && a.P[0] == 1
 			},
 		},
 	}
@@ -2562,8 +2605,8 @@ func Test_BackwardPointerToContainer(t *testing.T) {
 			}(),
 			nil,
 			func(_, actual any) bool {
-				out := actual.(*graphArray)
-				return out.P != nil && *out.P == 30 && out.P == &out.A[2]
+				a := actual.(*graphArray)
+				return a.P != nil && *a.P == 30 && a.P == &a.A[2]
 			},
 		},
 	}

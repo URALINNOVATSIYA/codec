@@ -65,7 +65,7 @@ func (u *Unserializer) clear() {
 }
 
 func (u *Unserializer) Decode(data []byte) (value any, err error) {
-	if data == nil {
+	if len(data) == 0 {
 		return nil, io.ErrUnexpectedEOF
 	}
 	defer func() {
@@ -205,12 +205,29 @@ func (u *Unserializer) decodeSerializable(t reflect.Type, v reflect.Value) {
 	if u.readByte() == meta_nil {
 		return
 	}
-	res := v.MethodByName("Unserialize").Call([]reflect.Value{reflect.ValueOf(u.readBytes(u.decodeLength()))})
+	res := v.MethodByName("Unserialize").Call(
+		[]reflect.Value{
+			reflect.ValueOf(u.readBytes(u.decodeLength())),
+		},
+	)
 	err := res[1]
 	if !err.IsNil() {
 		panic(err.Interface())
 	}
-	v.Set(res[0].Elem().Convert(t))
+	if res[0].IsNil() {
+		panic("Serializable.Unserialize returned invalid value")
+	}
+	value := res[0].Elem()
+	if t.Kind() == reflect.Pointer {
+		t = t.Elem()
+		v = reflect.New(t).Elem()
+	}
+	if value.Type().ConvertibleTo(t) {
+		value = value.Convert(t)
+	} else {
+		panic(fmt.Errorf("Serializable.Unserialize returned %v, want %v", value.Type(), t))
+	}
+	v.Set(value)
 }
 
 func (u *Unserializer) decodeNil() {
@@ -480,22 +497,17 @@ func (u *Unserializer) restoreSlices() {
 			}
 			switch tkind {
 			case reflect.String:
-				if pkind == reflect.String {
-					t.SetString(s.String())
-				} else {
-					t.SetString(unsafe.String((*byte)(s.UnsafePointer()), s.Len()))
+				if pkind != reflect.String {
+					s = reflect.ValueOf(unsafe.String((*byte)(s.UnsafePointer()), s.Len()))
 				}
 			case reflect.Slice:
 				if pkind == reflect.String {
 					s = reflect.ValueOf(unsafe.Slice(unsafe.StringData(s.String()), s.Len()))
 				}
-				if t.Type() != s.Type() {
-					s = s.Convert(t.Type())
-				}
-				t.Set(s)
 			default:
 				panic("slice expression target must be a string or slice")
 			}
+			t.Set(s)
 		}
 	}
 }
