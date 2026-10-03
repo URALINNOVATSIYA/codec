@@ -73,11 +73,21 @@ type (
 		testS2
 	}
 	testS1Tags struct {
-		f1 int    `codec:"id=2"`
-		f2 bool   `codec:"id=4"`
-		F3 string `codec:"id=3"`
+		f1 int    `codec:"id=20"`
+		f2 bool   `codec:"id=40"`
+		F3 string `codec:"id=30"`
 		F4 byte
-		f5 string `codec:"id=1"`
+		f5 string `codec:"id=10"`
+	}
+	taggedChild struct {
+		Value   int `codec:"id=21"`
+		Ignored string
+	}
+	taggedRecord struct {
+		Ignored    string
+		Child      *taggedChild `codec:"id=40"`
+		Deprecated bool         `codec:"id=5,deprecated"`
+		Any        any          `codec:"id=10"`
 	}
 	graphNode struct {
 		Value int

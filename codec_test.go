@@ -1936,6 +1936,23 @@ func Test_Struct(t *testing.T) {
 			nil,
 			nil,
 		},
+		// #8
+		{
+			taggedRecord{
+				Ignored:    "not serialized",
+				Child:      &taggedChild{Value: 123, Ignored: "also omitted"},
+				Deprecated: true,
+				Any:        taggedChild{Value: 456, Ignored: "omitted"},
+			},
+			nil,
+			func(_, actual any) bool {
+				value := actual.(taggedRecord)
+				child, ok := value.Any.(taggedChild)
+				return value.Ignored == "" &&
+					value.Child != nil && value.Child.Value == 123 && value.Child.Ignored == "" &&
+					!value.Deprecated && ok && child.Value == 456 && child.Ignored == ""
+			},
+		},
 	}
 	runTests(items, reg, t)
 }

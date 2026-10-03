@@ -616,10 +616,17 @@ func (s *Serializer) encodeStruct(v reflect.Value, id int) []byte {
 		return b
 	}
 	b[0] |= meta_tags
-	b = append(b, c2b(len(tags))...)
-	for i, containerId := range s.childs[id] {
-		b = append(b, c2b(tags[i].Id)...)
+	b = append(b, c2b(len(s.childs[id]))...)
+	childIndex := 0
+	for fieldIndex := range v.NumField() {
+		tag, exists := tags[fieldIndex]
+		if !exists || tag.Deprecated {
+			continue
+		}
+		containerId := s.childs[id][childIndex]
+		b = append(b, c2b(tag.Id)...)
 		b = append(b, s.encodeValue(s.childs[containerId][0])...)
+		childIndex++
 	}
 	return b
 }

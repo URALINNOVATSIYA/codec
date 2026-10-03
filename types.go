@@ -23,6 +23,7 @@ func NewTypeRegistry(typeAutoReg bool) *TypeRegistry {
 		typeAutoReg: typeAutoReg,
 		types:       make(map[int]reflect.Type),
 		funcs:       make(map[int]reflect.Value),
+		tags:        make(map[int]TagMap),
 		ids:         make(map[string]int),
 	}
 }
@@ -104,16 +105,7 @@ func (r *TypeRegistry) RegisterType(t reflect.Type) {
 	if _, exists := r.typeIdByName(name); exists {
 		return
 	}
-	id := r.bindTypeWithName(t, name)
-	tags, err := ParseTags(t)
-	if err != nil {
-		panic(err)
-	}
-	if len(tags) > 0 {
-		r.mx.Lock()
-		r.tags[id] = tags
-		r.mx.Unlock()
-	}
+	r.bindTypeWithName(t, name)
 }
 
 func (r *TypeRegistry) RegisterFunc(f any) {
@@ -198,6 +190,15 @@ func (r *TypeRegistry) bindTypeWithName(t reflect.Type, name string) int {
 	id := r.assignTypeId(name)
 	r.types[id] = t
 	r.mx.Unlock()
+	tags, err := ParseTags(t)
+	if err != nil {
+		panic(err)
+	}
+	if len(tags) > 0 {
+		r.mx.Lock()
+		r.tags[id] = tags
+		r.mx.Unlock()
+	}
 	return id
 }
 

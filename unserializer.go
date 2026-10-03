@@ -429,9 +429,10 @@ func (u *Unserializer) decodeStruct(v reflect.Value) {
 	fieldCount := v.NumField()
 	tags := u.typeRegistry.tagsByValue(v)
 	for range u.decodeLength() {
-		i := tags.IndexById(u.decodeId())
+		id := u.decodeId()
+		i := tags.IndexById(id)
 		if i < 0 || i >= fieldCount {
-			continue
+			panic(fmt.Errorf("unknown struct field id: %d", id))
 		}
 		field := v.Field(i)
 		u.decodeContainer(field.Type(), field)
