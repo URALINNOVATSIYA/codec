@@ -1632,6 +1632,15 @@ func Test_Interface(t *testing.T) {
 				return ok && p == nil
 			},
 		},
+		// #8
+		{
+			func() any {
+				n := 5
+				return testSerializableGraph{node: &n}
+			}(),
+			nil,
+			nil,
+		},
 	}
 	runTests(items, reg, t)
 }

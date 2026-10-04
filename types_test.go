@@ -137,6 +137,19 @@ func (flag *testSerializableBool) Unserialize(data []byte) (any, error) {
 	return testSerializableBool(data[0] == 1), nil
 }
 
+type testSerializableGraph struct {
+	node *int
+}
+
+func (g testSerializableGraph) Serialize() []byte {
+	return []byte{byte(*g.node)}
+}
+
+func (m testSerializableGraph) Unserialize(b []byte) (any, error) {
+	n := int(b[0])
+	return testSerializableGraph{node: &n}, nil
+}
+
 type testNode struct {
 	prev *testNode
 	next *testNode

@@ -184,6 +184,9 @@ func (s *Serializer) addSlice(v reflect.Value, id int) (*reflex.Slice, bool) {
 
 func (s *Serializer) visit(v reflect.Value, parentId, parentContainerId int) {
 	id := s.addNode(parentId, v)
+	if isSerializableValue(v) && v.Kind() != reflect.Pointer {
+		return
+	}
 	switch v.Kind() {
 	case reflect.Chan:
 		s.addReference(v, id)
