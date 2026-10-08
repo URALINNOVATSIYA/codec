@@ -73,11 +73,12 @@ Graph IDs assigned during traversal must not be confused with stream IDs.
 Before writing, a traversal of `childs` fills `imap`; serialized references and
 pointer records use this mapping.
 
-`Unserializer` stores the input stream and read position, a `values` array of
-restored values, and tables of pending work:
+`Unserializer` stores the input stream and read position, a `values` map of
+restored values indexed by stream ID, and tables of pending work:
 
 - `slices` contains expressions to apply to parent values;
 - `refs` contains locations waiting for the value at a node ID;
+- `ptrs` contains pointer locations grouped by their target node ID;
 - `maps` contains key/value pairs to insert after references have been fixed.
 
 ## 3. Building the graph for serialization
@@ -119,10 +120,10 @@ target; otherwise, the target is added as a node reachable from the graph's
 top level. This breaks recursion for cycles such as `node.Next = node` without
 discarding the relationship.
 
-References in the stream are encoded as `meta_ref` plus a node ID. The ID may
-refer to a node already read or a later node. The deserializer either assigns
-the known value immediately or records a pending assignment for the final
-restoration phase.
+Reference markers in node payloads are `meta_ref` bytes with no inline ID.
+Before the node stream, the references section maps each target ID to the IDs
+of locations that alias it. The decoder records these mappings before reading
+nodes, so targets may occur later in the stream.
 
 Map iteration order is controlled by Go and is not guaranteed to be stable
 between serializations. This does not change the semantics of the restored map,
@@ -143,8 +144,9 @@ After the main traversal, `visitSlices`:
 3. replaces separate nested-slice representations with references/expressions
    to the parent node where that matches the shared storage.
 
-When written, a slice expression contains the parent ID, start and end indexes,
-and, for a slice, the `max` bound. The deserializer applies it later to restore
+Slice expressions are not written inline. The header's shared-slices section
+contains the parent ID and, for each expression, the destination ID and
+`start/end/max` bounds. The decoder applies them after reading nodes to restore
 both the data and the shared-backing-array relationship.
 
 For zero-sized elements, `SliceMap` does not infer shared backing storage from
@@ -156,23 +158,28 @@ parent.
 ### 3.4. Renumbering nodes
 
 After slice processing, `renumberGraph` traverses child nodes from the virtual
-root and assigns sequential IDs. This numbering is used in the binary stream
-for ordinary references, slice expressions, and pointer records. Nodes required
-by pointers or virtual parents are written as top-level graph nodes.
+root and assigns sequential IDs. The IDs are implicit positions in the
+traversed graph and are used by the reference, pointer, and shared-slices
+header sections. Nodes required by pointers or virtual parents are written as
+top-level graph nodes.
 
 ## 4. Writing the binary stream
 
-The stream begins with:
+The stream begins with a one-byte header, followed by optional metadata
+sections and then the node stream:
 
 ```text
-version encoded_nodes [pointer_links]
+header [references_section] [pointers_section] [slices_section] encoded_nodes
 ```
 
-The first byte is the format version (`1`). Each node starts with a `u3` type
-ID, followed by the value payload. `uN` denotes an integer with an `N`-bit
-length prefix; integers use the minimum number of bytes. Signed values are
-transformed with `i2u` and then encoded as unsigned. Multi-byte payloads use
-big-endian order.
+The low four bits of the header contain the format version (`1`). Bits `0x10`,
+`0x20`, and `0x40` indicate the presence of references, pointers, and
+shared-slices sections, respectively; when present, sections appear in that
+order. Each section uses `u4` counts and IDs. Each top-level node starts with a
+`u3` type ID, followed by its value payload. `uN` denotes an integer with an
+`N`-bit length prefix; integers use the minimum number of bytes. Signed values
+are transformed with `i2u` and then encoded as unsigned. Multi-byte payloads
+use big-endian order.
 
 ### 4.1. Nodes and type identifiers
 
@@ -197,9 +204,9 @@ dynamic interface values carry a type ID.
   preserves a numeric value but does not make an address portable.
 - `float32` and `float64` encode their IEEE-754 representations; `complex`
   stores the real and imaginary parts consecutively.
-- A string without shared backing storage is written as a signed length and
-  bytes. A string represented as an expression over shared storage refers to
-  the parent node and indexes.
+- A string without shared backing storage is written as a `u4` byte length and
+  its bytes. A string represented over shared storage has a `meta_ref` marker;
+  its parent and bounds are in the shared-slices section.
 - Nil and non-nil empty values are distinct. Slice length and capacity are
   stored separately.
 - For channels, nilness, type direction, and capacity are represented; channel
@@ -216,18 +223,20 @@ Exact markers and payload layouts are documented in [FORMAT.md](./FORMAT.md).
 - **Array:** elements are written by index; there is no separate array header.
 - **Slice:** marker, length, capacity, and element values. A zero-capacity slice
   is encoded without traversing backing storage.
-- **Slice expression:** slice-expression marker, parent ID, and `start/end/max`
-  indexes; the actual value is assigned during restoration.
+- **Shared slice expression:** a `meta_ref` marker in the value stream; the
+  parent ID, destination ID, and `start/end/max` indexes are in the header's
+  shared-slices section.
 - **Map:** nil marker or non-nil marker, entry count, and key/value sequence.
   Pair order is not guaranteed.
 - **Struct:** struct marker and fields in declaration order when untagged.
 - **Interface:** complete dynamic node, including dynamic type ID.
-- **Pointer:** nil/non-nil marker in the main stream; its link to the value is
-  appended separately.
+- **Pointer:** nil/non-nil marker in the node stream; links to target values
+  are recorded in the header's pointers section.
 
 A repeated object may be encoded as `meta_ref` instead of repeating its
-payload. Therefore, the presence of a nested value does not necessarily imply
-that its contents are recursively written again.
+payload. Its target and alias IDs are recorded in the header's references
+section, not after the marker. Therefore, the presence of a nested value does
+not necessarily imply that its contents are recursively written again.
 
 ### 4.4. Struct tags
 
@@ -261,25 +270,27 @@ must include all required data and validate its input.
 
 ### 4.6. Pointer links
 
-After the main nodes, the serializer appends records of the form:
+Before the node stream, the serializer writes a pointers section when at least
+one pointer link exists. It contains records of the form:
 
 ```text
-meta_ref target_id pointer_id [pointer_id ...]
+target_id pointer_count pointer_id ...
 ```
 
-The first ID identifies the target value; subsequent IDs identify pointer
-values that must refer to it. This tail is separated from the main stream by
-`meta_ref` markers and contains compact IDs only. Deferred writing supports
-cycles and pointers to fields/elements even when their nodes were discovered
-elsewhere in the graph.
+The section begins with the record count; each record's first ID identifies
+the target value, followed by the count and IDs of pointer values that refer to
+it. All IDs use `u4`. Deferred restoration supports cycles and pointers to
+fields/elements even when their nodes were discovered elsewhere in the graph.
 
 ## 5. Deserialization
 
 ### 5.1. Reading the main stream
 
 `Decode` first checks that the input is non-empty, clears state from a previous
-call, and verifies the version byte. It then reads nodes until the next byte is
-the `meta_ref` marker; this marks the beginning of pointer-link records.
+call, and verifies the version in the header's low four bits. It reads the
+optional references, pointers, and shared-slices sections in flag order, then
+decodes nodes until the end of the input. There is no pointer-link tail or
+`meta_ref` delimiter.
 
 For each node, the decoder:
 
@@ -310,14 +321,14 @@ to other nodes or participate in cycles.
 
 ### 5.3. Restoration phases
 
-After the main stream, restoration happens in this order:
+After the node stream, restoration happens in this order:
 
 1. **Slice expressions (`restoreSlices`).** Parent values are sliced with
    `Slice`/`Slice3`; strings and `[]byte` can share byte storage through an
    unsafe representation where supported. The result is assigned to the saved
    destination slot.
-2. **Pointers (`restorePointers`).** Trailing pointer-link records are read and
-   pointers are assigned to their target values.
+2. **Pointers (`restorePointers`).** Pointer locations from the header section
+   are assigned to their target values.
 3. **Ordinary references (`restoreReferences`).** Every location waiting for a
    node ID receives the final value from `values`.
 4. **Maps (`restoreMaps`).** Deferred key/value pairs are inserted into their

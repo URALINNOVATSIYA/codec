@@ -151,25 +151,25 @@ func Test_String(t *testing.T) {
 		// #2
 		{
 			"0123456789",
-			[]byte{version, typeId(""), i2b(nil, 10)[0], i2b(nil, 10)[1], '0', '1', '2', '3', '4', '5', '6', '7', '8', '9'},
+			[]byte{version, typeId(""), c2b0(10), '0', '1', '2', '3', '4', '5', '6', '7', '8', '9'},
 			nil,
 		},
 		// #3
 		{
 			strings.Repeat("a", 255),
-			append(append([]byte{version, typeId("")}, i2b(nil, 255)...), []byte(strings.Repeat("a", 255))...),
+			append(append([]byte{version, typeId("")}, c2b(nil, 255)...), []byte(strings.Repeat("a", 255))...),
 			nil,
 		},
 		// #4
 		{
 			strings.Repeat("a", 65536),
-			append(append([]byte{version, typeId("")}, i2b(nil, 65536)...), []byte(strings.Repeat("a", 65536))...),
+			append(append([]byte{version, typeId("")}, c2b(nil, 65536)...), []byte(strings.Repeat("a", 65536))...),
 			nil,
 		},
 		// #5
 		{
 			testStr("abcd"),
-			[]byte{version, typeId(testStr("")), i2b0(4), 97, 98, 99, 100},
+			[]byte{version, typeId(testStr("")), c2b0(4), 97, 98, 99, 100},
 			nil,
 		},
 		// #6
@@ -1973,7 +1973,7 @@ func Test_Slice(t *testing.T) {
 		{
 			([]int)(nil),
 			[]byte{
-				version, typeId([]int{}), meta_slice | meta_nil,
+				version, typeId([]int{}), meta_nil,
 			},
 			nil,
 		},
@@ -1981,7 +1981,7 @@ func Test_Slice(t *testing.T) {
 		{
 			[]bool{true, false, true},
 			[]byte{
-				version, typeId([]bool{}), meta_slice, c2b0(3), c2b0(3),
+				version, typeId([]bool{}), meta_nonil, c2b0(3), c2b0(3),
 				meta_tru, meta_fls, meta_tru,
 			},
 			nil,
@@ -1992,11 +1992,7 @@ func Test_Slice(t *testing.T) {
 				s := []byte{1, 2, 3, 4, 5, 6}
 				return [2][]byte{s, s[0:3:5]}
 			}(),
-			[]byte{
-				version, typeId([2][]byte{}),
-				meta_slice, c2b0(6), c2b0(6), 1, 2, 3, 4, 5, 6, // s
-				meta_slice | meta_sexp, i2b0(2), c2b0(0), c2b0(3), c2b0(5), // s[0:3:5]
-			},
+			nil,
 			func(expected, actual any) bool {
 				if !defaultEq(expected, actual) {
 					return false
@@ -2016,12 +2012,7 @@ func Test_Slice(t *testing.T) {
 				s := []byte{1, 2, 3, 4, 5, 6}
 				return [3][]byte{s, s[2:4], s[0:3:4]}
 			}(),
-			[]byte{
-				version, typeId([3][]byte{}),
-				meta_slice, c2b0(6), c2b0(6), 1, 2, 3, 4, 5, 6, // s
-				meta_slice | meta_sexp, i2b0(2), c2b0(2), c2b0(4), c2b0(6), // s[2:4]
-				meta_slice | meta_sexp, i2b0(2), c2b0(0), c2b0(3), c2b0(4), // s[0:3:4]
-			},
+			nil,
 			func(expected, actual any) bool {
 				if !defaultEq(expected, actual) {
 					return false
@@ -2044,12 +2035,7 @@ func Test_Slice(t *testing.T) {
 				s := []byte{1, 2, 3, 4, 5, 6}
 				return [3]any{s, s[2:4], s[0:3:4]}
 			}(),
-			[]byte{
-				version, typeId([3]any{}),
-				typeId([]byte{}), meta_slice, c2b0(6), c2b0(6), 1, 2, 3, 4, 5, 6, // s
-				typeId([]byte{}), meta_slice | meta_sexp, i2b0(3), c2b0(2), c2b0(4), c2b0(6), // s[2:4]
-				typeId([]byte{}), meta_slice | meta_sexp, i2b0(3), c2b0(0), c2b0(3), c2b0(4), // s[0:3:4]
-			},
+			nil,
 			func(expected, actual any) bool {
 				if !defaultEq(expected, actual) {
 					return false
@@ -2072,12 +2058,7 @@ func Test_Slice(t *testing.T) {
 				s := []byte{1, 2, 3, 4, 5, 6}
 				return [3]any{s[2:4], s, s[0:3:4]}
 			}(),
-			[]byte{
-				version, typeId([3]any{}),
-				typeId([]byte{}), meta_slice | meta_sexp, i2b0(6), c2b0(2), c2b0(4), c2b0(6), // s[2:4]
-				typeId([]byte{}), meta_slice, c2b0(6), c2b0(6), 1, 2, 3, 4, 5, 6, // s
-				typeId([]byte{}), meta_slice | meta_sexp, i2b0(6), c2b0(0), c2b0(3), c2b0(4), // s[0:3:4]
-			},
+			nil,
 			func(expected, actual any) bool {
 				if !defaultEq(expected, actual) {
 					return false
@@ -2103,15 +2084,7 @@ func Test_Slice(t *testing.T) {
 				a[2] = a[1:3]
 				return a
 			}(),
-			[]byte{
-				version, typeId((*[3]any)(nil)), meta_nonil, // *a
-				typeId([3]any{}),                                                            // a
-				typeId([]any{}), meta_slice | meta_sexp, i2b0(1), c2b0(0), c2b0(2), c2b0(3), // a[0:2]
-				typeId([]any{}), meta_slice | meta_sexp, i2b0(1), c2b0(1), c2b0(2), c2b0(3), // a[1:2]
-				typeId([]any{}), meta_slice | meta_sexp, i2b0(1), c2b0(1), c2b0(3), c2b0(3), // a[1:3]
-				// refs
-				meta_ref, c2b0(1), c2b0(0),
-			},
+			nil,
 			func(expected, actual any) bool {
 				if !defaultEq(expected, actual) {
 					return false
@@ -2278,7 +2251,7 @@ func Test_Slice(t *testing.T) {
 }
 
 func Test_ReferenceToTheSameValue(t *testing.T) {
-	reg, typeId, funcId := registryWithFuncId()
+	reg, _ := registry()
 	items := []testItem{
 		// #1
 		{
@@ -2288,13 +2261,7 @@ func Test_ReferenceToTheSameValue(t *testing.T) {
 				s.F3 = "abc"
 				return s
 			}(),
-			[]byte{
-				version,
-				typeId(testS3{}), meta_strc, // testS3 header
-				typeId(""), i2b0(3), 'a', 'b', 'c', // testS3.F1
-				typeId(nil), meta_nil, // testS3.F2
-				typeId(""), meta_ref, c2b0(3), // testS3.F3
-			},
+			nil,
 			nil,
 		},
 		// #2
@@ -2303,13 +2270,7 @@ func Test_ReferenceToTheSameValue(t *testing.T) {
 				s := strings.Clone("abc")
 				return [3]string{s, s, s}
 			}(),
-			[]byte{
-				version,
-				typeId([3]string{}),
-				i2b0(3), 'a', 'b', 'c', // a[0]
-				meta_ref, c2b0(2), // a[1]
-				meta_ref, c2b0(2), // a[2]
-			},
+			nil,
 			nil,
 		},
 		// #3
@@ -2353,13 +2314,7 @@ func Test_ReferenceToTheSameValue(t *testing.T) {
 				s.F2 = registry
 				return s
 			}(),
-			[]byte{
-				version,
-				typeId(testS3{}), meta_strc, // testS3 header
-				typeId(registry), meta_nonil, funcId(registry), // testS3.F1
-				typeId(registry), meta_ref, c2b0(3), // testS3.F2
-				typeId(nil), meta_nil, // testS3.F3
-			},
+			nil,
 			func(expected, actual any) bool {
 				e := expected.(testS3)
 				a := actual.(testS3)
@@ -2369,14 +2324,7 @@ func Test_ReferenceToTheSameValue(t *testing.T) {
 		// #6
 		{
 			[4]func(int, int) int{testSum, testDiv, testSum, testDiv},
-			[]byte{
-				version,
-				typeId([4]func(int, int) int{}),
-				meta_nonil, funcId(testSum),
-				meta_nonil, funcId(testDiv),
-				meta_ref, c2b0(2),
-				meta_ref, c2b0(4),
-			},
+			nil,
 			func(expected, actual any) bool {
 				e := expected.([4]func(int, int) int)
 				a := actual.([4]func(int, int) int)
@@ -2422,13 +2370,7 @@ func Test_ReferenceToTheSameValue(t *testing.T) {
 				s.F3 = ch
 				return s
 			}(),
-			[]byte{
-				version,
-				typeId(testS3{}), meta_strc, // testS3 header
-				typeId(nil), meta_nil, // testS3.F1 (id = 1)
-				typeId((chan<- byte)(nil)), meta_nonil, c2b0(15), // testS3.F2 (id = 4)
-				typeId((chan<- byte)(nil)), meta_ref, c2b0(6), // testS3.F3 (id = 7)
-			},
+			nil,
 			func(expected, actual any) bool {
 				e := expected.(testS3)
 				a := actual.(testS3)
@@ -2472,12 +2414,7 @@ func Test_ReferenceToTheSameValue(t *testing.T) {
 				m := map[byte]byte{1: 100}
 				return [3]any{m, m, m}
 			}(),
-			[]byte{
-				version, typeId([3]any{}),
-				typeId(map[byte]byte{}), meta_nonil, c2b0(1), 1, 100, // a[0]
-				typeId(map[byte]byte{}), meta_ref, c2b0(3), // a[1]
-				typeId(map[byte]byte{}), meta_ref, c2b0(3), // a[2]
-			},
+			nil,
 			nil,
 		},
 		// #13
@@ -2599,12 +2536,7 @@ func Test_ReferenceToTheSameValue(t *testing.T) {
 				s := strings.Clone("ab")
 				return [3]string{s[:1], s, s[1:]}
 			}(),
-			[]byte{
-				version, typeId([3]string{}),
-				i2b0(-1), i2b0(4), c2b0(0), c2b0(1), // s[:1]
-				i2b0(2), 97, 98, // s
-				i2b0(-1), i2b0(4), c2b0(1), c2b0(2), // s[1:]
-			},
+			nil,
 			nil,
 		},
 	}

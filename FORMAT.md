@@ -7,6 +7,7 @@ This document describes version 1 of the binary format produced by the
 
 - [Notation](#notation)
 - [Top-level layout](#top-level-layout)
+- [Header sections](#header-sections)
 - [Self-delimiting integers](#self-delimiting-integers)
 - [Type identifiers](#type-identifiers)
 - [Value encoding](#value-encoding)
@@ -21,7 +22,7 @@ This document describes version 1 of the binary format produced by the
 	- [Interfaces](#interfaces)
 	- [Pointers](#pointers)
 	- [Custom serializable values](#custom-serializable-values)
-- [References and pointer restoration](#references-and-pointer-restoration)
+- [References, pointers, and shared slices](#references-pointers-and-shared-slices)
 - [Compatibility notes](#compatibility-notes)
 
 ## Notation
@@ -40,20 +41,57 @@ The following notation is used throughout this document:
 A serialized value has this layout:
 
 ```text
-version encoded_values [pointer_links]
+header [references_section] [pointers_section] [slices_section] node_stream
 ```
 
-`version` is one byte. Version 1 is encoded as `0x01`.
+The one-byte header contains the version in its low four bits and flags for
+optional sections in its high bits. Version 1 is `0x01`; the section flags are
+`0x10` for references, `0x20` for pointers, and `0x40` for shared slices. If
+more than one section is present, they appear in the order shown above.
 
-The root value and every value reachable from it are encoded as nodes. A node
-has a type identifier followed by the representation of that value:
+The node stream is the concatenation of the root and any other top-level
+values, with no separate length or terminator. Each top-level node starts with
+a type identifier followed by its value. Nested fields and elements are
+normally encoded using their declared type and do not repeat a type
+identifier; dynamic interface values do.
+
+Node IDs are implicit in the traversal order and are used by the optional
+sections. The decoder reads those sections first, then decodes nodes through
+the end of the input. This allows links to refer to nodes decoded later.
+
+## Header sections
+
+Each section is present only when its corresponding header flag is set. All
+counts and IDs in these sections use `u4`.
+
+The references section groups alias locations by the ID of their target:
 
 ```text
-node = type_id value
+u4(target_count)
+{ u4(target_id) u4(alias_count) { u4(alias_id) } }
 ```
 
-The value graph is written in traversal order. References can point to earlier
-or later nodes, which allows shared values and cycles to be restored.
+The pointers section groups pointer locations by the ID of the value they
+point to:
+
+```text
+u4(target_count)
+{ u4(target_id) u4(pointer_count) { u4(pointer_id) } }
+```
+
+The shared-slices section records expressions that recreate slices or strings
+over a decoded parent value:
+
+```text
+u4(parent_count)
+{ u4(parent_id) u4(expression_count)
+  { u4(target_id) u4(start) u4(end) u4(max) } }
+```
+
+`max` is the three-index slice bound; for strings the decoder uses only
+`start` and `end`. A target node containing a shared value has a `meta_ref`
+marker in the node stream. The tables provide the target and parent IDs; no
+IDs or indexes follow that marker inline.
 
 ## Self-delimiting integers
 
@@ -86,9 +124,11 @@ width.
 
 ## Type identifiers
 
-Every node starts with a `u3` type ID. IDs are assigned by `TypeRegistry` and
-must resolve to the same Go types during decoding. Function values use a
-second `u3` function ID in their payload.
+Every top-level node and dynamic interface value starts with a `u3` type ID.
+Nested fields and elements use the type declared by their container and do not
+carry a type ID of their own. IDs are assigned by `TypeRegistry` and must
+resolve to the same Go types during decoding. Function values use a second
+`u3` function ID in their payload.
 
 Type registration is therefore part of the format contract: a decoder must
 have the types and function values referenced by the stream in its registry.
@@ -132,24 +172,17 @@ values in the same order.
 
 ### Strings
 
-A string that does not share backing storage with another string or byte slice
-is encoded as its signed byte length followed by its bytes:
+A string without shared storage is encoded as its `u4` byte length followed by
+its bytes:
 
 ```text
-i4 byte_length string_bytes
+u4(byte_length) string_bytes
 ```
 
-When a string shares backing storage with another string or byte slice, it is
-encoded as a slice expression. The length is the signed sentinel `-1`, followed
-by the parent node ID and the start and end byte indexes:
-
-```text
-i4(-1) i4 parent_id u4 start u4 end
-```
-
-Repeated strings may instead be represented by a reference node. String
-references and slice expressions are resolved after the referenced nodes have
-been decoded.
+A string that shares storage with another string or slice is represented by a
+`meta_ref` marker in the node stream and an entry in the shared-slices header
+section. Repeated strings can also use the references section. Their links are
+restored after the nodes have been decoded.
 
 ### Functions and channels
 
@@ -178,30 +211,16 @@ creates a new channel with the recorded capacity and direction.
 An array has no header. Its elements are encoded in index order as values of
 the array element type.
 
-A slice starts with `meta_slice`:
+A nil slice is encoded as `meta_nil`. A non-nil slice is encoded as:
 
 ```text
-meta_slice length capacity element_values...
+meta_nonil length capacity element_values...
 ```
 
-`length` and `capacity` are `u4` values. A nil slice is marked by setting the
-`meta_nil` bit in the slice header:
-
-```text
-meta_slice | meta_nil
-```
-
-A slice created from another slice with a slicing expression uses
-`meta_slice | meta_sexp` and stores:
-
-```text
-meta_slice | meta_sexp parent_id start end max
-```
-
-`parent_id`, `start`, `end`, and `max` are `u4` values, except that the parent
-ID is decoded using the signed integer path because it is stored with the
-same compact integer helper. The expression is applied after all nodes have
-been read.
+`length` and `capacity` are `u4` values. A non-nil zero-capacity slice still
+stores its length and capacity, but has no element payload. A slice or string
+that shares a backing value is represented by `meta_ref`; its parent ID and
+bounds are stored in the shared-slices section.
 
 ### Maps
 
@@ -233,9 +252,9 @@ field_id field_value ...
 ```
 
 `tagged_field_count` and every `field_id` are `u4` values. Field IDs come from
-the `codec:"id=N"` struct tags. A field tagged `deprecated` is retained in the
-registry metadata but may be omitted or ignored by application compatibility
-logic.
+the `codec:"id=N"` struct tags. Fields without a tag and fields marked
+`deprecated` are omitted. When decoding, fields absent from the stream retain
+their zero values; an unknown field ID is an error.
 
 ### Interfaces
 
@@ -271,32 +290,23 @@ meta_nonil body_length body_bytes
 for a non-nil value. `body_length` is a `u4`. The decoder passes `body_bytes`
 to the type's `Unserialize` method.
 
-## References and pointer restoration
+## References, pointers, and shared slices
 
-The byte `meta_ref` (`0x00`) marks a reference. It is followed by a `u4` node
-ID:
+The byte `meta_ref` (`0x00`) marks a value whose contents or storage are
+represented elsewhere. It is followed by no inline ID. For ordinary aliases,
+the references section maps the target node ID to one or more alias location
+IDs. Pointer relationships are recorded separately in the pointers section.
+Slice and string expressions are recorded in the shared-slices section.
 
-```text
-meta_ref referenced_node_id
-```
-
-This representation is used for repeated strings, maps, slices, channels,
-functions, custom serializable reference-like values, and other shared
-objects. The referenced node may appear later in the encoded value stream;
-forward references are resolved after all value nodes have been read.
-
-After the encoded values, the stream may contain pointer-link records:
-
-```text
-meta_ref target_id pointer_id {pointer_id}
-```
-
-Each ID is a `u4`. The decoder assigns pointers to the target value during its
-pointer-restoration phase. The stream ends after the last pointer-link record.
+The decoder first reads the flagged sections, then reads the node stream and
+restores slice expressions, pointers, ordinary references, and deferred map
+entries. Since IDs are implicit positions in the traversed graph, a section
+can safely describe a link to a node that appears later in the node stream.
 
 ## Compatibility notes
 
-- The first byte is the format version and must be checked before decoding.
+- The low four bits of the first byte contain the format version; the high bits
+  indicate which optional header sections follow.
 - Type IDs are registry-local; serialized data is not self-contained without a
 	compatible type registry.
 - Function IDs identify registered function values and cannot be reconstructed
@@ -305,4 +315,4 @@ pointer-restoration phase. The stream ends after the last pointer-link record.
 	valid as a portable reconstructed pointer.
 - `uintptr` has the same address-portability limitation.
 - Channel state and buffered elements are not part of the format; only nilness,
-	direction, and capacity are represented.
+  direction, and capacity are represented.

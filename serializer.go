@@ -12,6 +12,9 @@ import (
 
 const (
 	version    byte = 1           // current serializer version
+	meta_sref  byte = 0b0001_0000 // mark of references section
+	meta_sptr  byte = 0b0010_0000 // mark of pointers section
+	meta_sslc  byte = 0b0100_0000 // mark of slices section
 	meta_ref   byte = 0b0000_0000 // pseudo type for referenced values
 	meta_fls   byte = 0b0000_0001 // boolean false
 	meta_tru   byte = 0b0000_0011 // boolean true
@@ -19,8 +22,6 @@ const (
 	meta_nonil byte = 0b0010_0000 // determines whether underlying value is not nil
 	meta_strc  byte = 0b0100_0000 // mark of structs
 	meta_tags  byte = 0b0000_0001 // mark of structs that has codec tags
-	meta_slice byte = 0b1000_0000 // mark of structs
-	meta_sexp  byte = 0b0000_0001 // mark of a slice that created as a slice expression
 )
 
 type containerKey struct {
@@ -99,8 +100,10 @@ func (s *Serializer) encode(v reflect.Value) []byte {
 	s.renumberGraph(-1)
 	b := make([]byte, 1, min(max(1, len(s.values)<<1), 4096))
 	b[0] = version
-	b = s.encodeValues(b)
+	b = s.encodeRefs(b)
 	b = s.encodePtrs(b)
+	b = s.encodeSlices(b)
+	b = s.encodeValues(b)
 	return b
 }
 
@@ -419,8 +422,8 @@ func (s *Serializer) encodeSerializable(b []byte, v reflect.Value, id int) []byt
 		if v.IsNil() {
 			return s.encodeNil(b)
 		}
-		if ref := s.addReference(v, id); ref >= 0 {
-			return s.encodeReference(b, ref)
+		if _, exists := s.refs[id]; exists {
+			return s.encodeReference(b)
 		}
 	}
 	body := v.MethodByName("Serialize").Call(nil)[0].Interface().([]byte)
@@ -512,8 +515,8 @@ func (s *Serializer) encodeChan(b []byte, v reflect.Value, id int) []byte {
 	if v.IsNil() {
 		return s.encodeNil(b)
 	}
-	if ref, exists := s.refs[id]; exists {
-		return s.encodeReference(b, ref)
+	if _, exists := s.refs[id]; exists {
+		return s.encodeReference(b)
 	}
 	b = append(b, meta_nonil)
 	return c2b(b, v.Cap())
@@ -523,8 +526,8 @@ func (s *Serializer) encodeFunc(b []byte, v reflect.Value, id int) []byte {
 	if v.IsNil() {
 		return s.encodeNil(b)
 	}
-	if ref, exists := s.refs[id]; exists {
-		return s.encodeReference(b, ref)
+	if _, exists := s.refs[id]; exists {
+		return s.encodeReference(b)
 	}
 	b = append(b, meta_nonil)
 	return u2bs(b, uint64(s.typeRegistry.funcIdByValue(v)), 3)
@@ -533,50 +536,36 @@ func (s *Serializer) encodeFunc(b []byte, v reflect.Value, id int) []byte {
 func (s *Serializer) encodeString(b []byte, v reflect.Value, id int) []byte {
 	if ref, exists := s.refs[id]; exists {
 		if s.slices.Get(ref).Parent == nil {
-			return s.encodeReference(b, ref)
+			return s.encodeReference(b)
 		}
-		id = ref
+		return append(b, meta_ref)
 	}
-	slice := s.slices.Get(id)
-	if slice.Parent == nil {
-		return append(i2b(b, v.Len()), v.String()...)
+	if s.slices.Get(id).Parent == nil {
+		return append(c2b(b, v.Len()), v.String()...)
 	}
-	p := slice.Parent
-	b = i2b(b, -1)
-	b = i2b(b, s.imap[p.Id])
-	i, j, _ := p.SliceOf(slice)
-	b = c2b(b, i)
-	b = c2b(b, j)
-	return b
+	return append(b, meta_ref)
 }
 
 func (s *Serializer) encodeSlice(b []byte, v reflect.Value, id int) []byte {
 	if v.IsNil() {
-		return append(b, meta_slice|meta_nil)
+		return append(b, meta_nil)
 	}
 	if v.Cap() == 0 {
-		b = append(b, meta_slice)
+		b = append(b, meta_nonil)
 		b = c2b(b, v.Len())
 		return c2b(b, v.Cap())
 	}
 	if ref, exists := s.refs[id]; exists {
 		if s.slices.Get(ref).Parent == nil {
-			return s.encodeReference(b, ref)
+			return s.encodeReference(b)
 		}
-		id = ref
+		return append(b, meta_ref)
 	}
-	b = append(b, meta_slice)
 	slice := s.slices.Get(id)
 	if slice.Parent != nil {
-		b[len(b)-1] |= meta_sexp
-		p := slice.Parent
-		b = i2b(b, s.imap[p.Id])
-		i, j, k := p.SliceOf(slice)
-		b = c2b(b, i)
-		b = c2b(b, j)
-		b = c2b(b, k)
-		return b
+		return append(b, meta_ref)
 	}
+	b = append(b, meta_nonil)
 	b = c2b(b, v.Len())
 	b = c2b(b, v.Cap())
 	for _, containerId := range s.childs[id] {
@@ -589,8 +578,8 @@ func (s *Serializer) encodeMap(b []byte, v reflect.Value, id int) []byte {
 	if v.IsNil() {
 		return s.encodeNil(b)
 	}
-	if ref, exists := s.refs[id]; exists {
-		return s.encodeReference(b, ref)
+	if _, exists := s.refs[id]; exists {
+		return s.encodeReference(b)
 	}
 	b = append(b, meta_nonil)
 	b = c2b(b, v.Len())
@@ -643,20 +632,84 @@ func (s *Serializer) encodePointer(b []byte, v reflect.Value) []byte {
 	return append(b, meta_nonil)
 }
 
-func (s *Serializer) encodeReference(b []byte, id int) []byte {
-	b = append(b, meta_ref)
-	return c2b(b, s.imap[id])
+func (s *Serializer) encodeReference(b []byte) []byte {
+	return append(b, meta_ref)
+}
+
+func (s *Serializer) encodeRefs(b []byte) []byte {
+	if len(s.refs) == 0 {
+		return b
+	}
+	refs := make(map[int][]int)
+	for id, ref := range s.refs {
+		refs[ref] = append(refs[ref], id)
+	}
+	b[0] |= meta_sref
+	b = c2b(b, len(refs))
+	for referencedValueId, refIds := range refs {
+		b = c2b(b, s.imap[referencedValueId])
+		b = c2b(b, len(refIds))
+		for _, refId := range refIds {
+			b = c2b(b, s.imap[s.settableParentId(refId)])
+		}
+	}
+	return b
 }
 
 func (s *Serializer) encodePtrs(b []byte) []byte {
-	for ptrValueId, ptrIds := range s.ptrs {
-		b = append(b, meta_ref)
-		b = c2b(b, s.imap[ptrValueId])
+	if len(s.ptrs) == 0 {
+		return b
+	}
+	b[0] |= meta_sptr
+	b = c2b(b, len(s.ptrs))
+	for pointedValueId, ptrIds := range s.ptrs {
+		b = c2b(b, s.imap[pointedValueId])
+		b = c2b(b, len(ptrIds))
 		for _, ptrId := range ptrIds {
 			b = c2b(b, s.imap[ptrId])
 		}
 	}
 	return b
+}
+
+func (s *Serializer) encodeSlices(b []byte) []byte {
+	parentWithChilds := 0
+	for _, parent := range s.slices.Parents() {
+		if len(parent.Childs) > 0 {
+			parentWithChilds++
+		}
+	}
+	if parentWithChilds == 0 {
+		return b
+	}
+	b[0] |= meta_sslc
+	b = c2b(b, parentWithChilds)
+	for _, parent := range s.slices.Parents() {
+		if len(parent.Childs) == 0 {
+			continue
+		}
+		b = c2b(b, s.imap[parent.Id])
+		b = c2b(b, len(parent.Childs))
+		for _, child := range parent.Childs {
+			b = c2b(b, s.imap[s.settableParentId(child.Id)])
+			i, j, k := parent.SliceOf(child)
+			b = c2b(b, i)
+			b = c2b(b, j)
+			b = c2b(b, k)
+		}
+	}
+	return b
+}
+
+func (s *Serializer) settableParentId(childId int) int {
+	pid := s.parents[childId]
+	if pid < 0 {
+		return childId
+	}
+	if s.values[pid].Kind() == reflect.Interface {
+		return pid
+	}
+	return childId
 }
 
 func Serialize(value any, options ...any) []byte {
