@@ -3145,15 +3145,17 @@ func Test_MixedContainerPointers(t *testing.T) {
 		{
 			func() any {
 				m := map[byte]byte{1: 2}
-				a := [2]map[byte]byte{m, m}
-				return [3]any{a, &a[1], &m}
+				a := &[2]map[byte]byte{m, m}
+				return [3]any{*a, &a[1], &m}
 			}(),
 			nil,
 			func(expected, actual any) bool {
 				if !defaultEq(expected, actual) {
 					return false
 				}
-				return false
+				a := actual.([3]any)
+				*a[1].(*map[byte]byte) = map[byte]byte{100: 200}
+				return true
 			},
 		},
 	}
