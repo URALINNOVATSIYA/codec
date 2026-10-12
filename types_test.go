@@ -189,7 +189,7 @@ func testDiv(a, b int) int {
 func Test_TypeIdByValue(t *testing.T) {
 	items := []struct {
 		value       any
-		encodedType int
+		encodedType uint16
 	}{
 		{nil, 1},
 		{false, 2},

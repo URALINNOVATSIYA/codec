@@ -188,7 +188,7 @@ func (u *Unserializer) decodeLength() int {
 }
 
 func (u *Unserializer) decodeType() reflect.Type {
-	return u.typeRegistry.typeById(int(u.decodeCount(3)))
+	return u.typeRegistry.typeById(uint16(u.decodeCount(2)))
 }
 
 func (u *Unserializer) decodeNode() reflect.Value {
@@ -402,7 +402,7 @@ func (u *Unserializer) decodeFunc(v reflect.Value) {
 	case meta_ref, meta_nil:
 		return
 	}
-	f := u.typeRegistry.funcById(int(u.decodeCount(3)))
+	f := u.typeRegistry.funcById(uint16(u.decodeCount(2)))
 	v.Set(reflex.MakeExported(f))
 }
 

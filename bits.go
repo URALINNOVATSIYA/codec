@@ -4,16 +4,16 @@ import (
 	"math/bits"
 )
 
-func i2b0(v int) byte {
-	return u2bs(nil, i2u(int64(v)), 4)[0]
+func t2b0(v uint16) byte {
+	return t2b(nil, v)[0]
+}
+
+func t2b(b []byte, v uint16) []byte {
+	return u2bs(b, uint64(v), 2)
 }
 
 func c2b0(v int) byte {
 	return c2b(nil, v)[0]
-}
-
-func i2b(b []byte, v int) []byte {
-	return u2bs(b, i2u(int64(v)), 4)
 }
 
 func c2b(b []byte, v int) []byte {

@@ -9,22 +9,27 @@ import (
 	"github.com/URALINNOVATSIYA/reflex"
 )
 
+type typeKey struct {
+	t reflect.Type
+	funcName string
+}
+
 type TypeRegistry struct {
 	typeAutoReg bool
-	types       map[int]reflect.Type  // registered types
-	funcs       map[int]reflect.Value // registered functions
-	tags        map[int]TagMap        // codec struct tags
-	ids         map[string]int        // type or func full names and their ids
+	types       map[uint16]reflect.Type  // registered types
+	funcs       map[uint16]reflect.Value // registered functions
+	tags        map[uint16]TagMap        // codec struct tags
+	ids         map[typeKey]uint16       // type or func full names and their ids
 	mx          sync.RWMutex
 }
 
 func NewTypeRegistry(typeAutoReg bool) *TypeRegistry {
 	return &TypeRegistry{
 		typeAutoReg: typeAutoReg,
-		types:       make(map[int]reflect.Type),
-		funcs:       make(map[int]reflect.Value),
-		tags:        make(map[int]TagMap),
-		ids:         make(map[string]int),
+		types:       make(map[uint16]reflect.Type),
+		funcs:       make(map[uint16]reflect.Value),
+		tags:        make(map[uint16]TagMap),
+		ids:         make(map[typeKey]uint16),
 	}
 }
 
@@ -38,8 +43,8 @@ func (r *TypeRegistry) TurnOffTypeAutoRegistration() {
 
 func (r *TypeRegistry) RegisteredTypeNames() []string {
 	names := make([]string, len(r.ids))
-	for name, i := range r.ids {
-		names[i] = name
+	for key, i := range r.ids {
+		names[i] = reflex.NameOf(key.t)
 	}
 	return names
 }
@@ -101,11 +106,14 @@ func (r *TypeRegistry) RegisterTypeRec(t reflect.Type) {
 }
 
 func (r *TypeRegistry) RegisterType(t reflect.Type) {
-	name := reflex.NameOf(t)
-	if _, exists := r.typeIdByName(name); exists {
+	key := typeKey{t: t}
+	r.mx.RLock()
+	_, exists := r.ids[key]
+	r.mx.RUnlock()
+	if exists {
 		return
 	}
-	r.bindTypeWithName(t, name)
+	r.bindType(key)
 }
 
 func (r *TypeRegistry) RegisterFunc(f any) {
@@ -113,14 +121,20 @@ func (r *TypeRegistry) RegisterFunc(f any) {
 	if v.Kind() != reflect.Func {
 		panic(fmt.Errorf("argument of RegisterFunc is not function"))
 	}
-	name := reflex.FuncNameOf(v)
-	if _, exists := r.typeIdByName(name); exists {
+	key := typeKey{
+		t: v.Type(),
+		funcName: reflex.FuncNameOf(v),
+	}
+	r.mx.RLock()
+	_, exists := r.ids[key]
+	r.mx.RUnlock()
+	if exists {
 		return
 	}
-	r.bindFuncWithName(v, name)
+	r.bindFunc(key, v)
 }
 
-func (r *TypeRegistry) typeById(id int) reflect.Type {
+func (r *TypeRegistry) typeById(id uint16) reflect.Type {
 	r.mx.RLock()
 	t, exists := r.types[id]
 	r.mx.RUnlock()
@@ -130,7 +144,7 @@ func (r *TypeRegistry) typeById(id int) reflect.Type {
 	return t
 }
 
-func (r *TypeRegistry) funcById(id int) reflect.Value {
+func (r *TypeRegistry) funcById(id uint16) reflect.Value {
 	r.mx.RLock()
 	f, exists := r.funcs[id]
 	r.mx.RUnlock()
@@ -148,49 +162,55 @@ func (r *TypeRegistry) tagsByValue(v reflect.Value) TagMap {
 	return tags
 }
 
-func (r *TypeRegistry) typeIdByValue(v reflect.Value) int {
+func (r *TypeRegistry) typeIdByType(t reflect.Type) uint16 {
+	key := typeKey{t: t}
+	r.mx.RLock()
+	id, exists := r.ids[key]
+	r.mx.RUnlock()
+	if exists {
+		return id
+	}
+	if !r.typeAutoReg {
+		panic(fmt.Errorf("unregistered type: %s", reflex.NameOf(t)))
+	}
+	return r.bindType(key)
+}
+
+func (r *TypeRegistry) typeIdByValue(v reflect.Value) uint16 {
 	var t reflect.Type
 	if v.IsValid() {
 		t = v.Type()
 	}
-	name := reflex.NameOf(t)
-	if id, exists := r.typeIdByName(name); exists {
-		return id
-	}
-	if !r.typeAutoReg {
-		panic(fmt.Errorf("unregistered type: %s", name))
-	}
-	return r.bindTypeWithName(t, name)
+	return r.typeIdByType(t)
 }
 
-func (r *TypeRegistry) funcIdByValue(v reflect.Value) int {
+func (r *TypeRegistry) funcIdByValue(v reflect.Value) uint16 {
 	if v.Kind() != reflect.Func {
 		panic("argument must be a function")
 	}
-	name := reflex.FuncNameOf(v)
-	if id, exists := r.typeIdByName(name); exists {
+	key := typeKey{
+		t: v.Type(),
+		funcName: reflex.FuncNameOf(v),
+	}
+	r.mx.RLock()
+	id, exists := r.ids[key]
+	r.mx.RUnlock()
+	if exists {
 		return id
 	}
 	if !r.typeAutoReg {
-		panic(fmt.Errorf("unregistered func: %s", name))
+		panic(fmt.Errorf("unregistered func: %s", key.funcName))
 	}
-	r.RegisterType(v.Type())
-	return r.bindFuncWithName(v, name)
+	r.RegisterType(key.t)
+	return r.bindFunc(key, v)
 }
 
-func (r *TypeRegistry) typeIdByName(name string) (id int, exists bool) {
-	r.mx.RLock()
-	id, exists = r.ids[name]
-	r.mx.RUnlock()
-	return
-}
-
-func (r *TypeRegistry) bindTypeWithName(t reflect.Type, name string) int {
+func (r *TypeRegistry) bindType(key typeKey) uint16 {
 	r.mx.Lock()
-	id := r.assignTypeId(name)
-	r.types[id] = t
+	id := r.assignTypeId(key)
+	r.types[id] = key.t
 	r.mx.Unlock()
-	tags, err := ParseTags(t)
+	tags, err := ParseTags(key.t)
 	if err != nil {
 		panic(err)
 	}
@@ -202,19 +222,19 @@ func (r *TypeRegistry) bindTypeWithName(t reflect.Type, name string) int {
 	return id
 }
 
-func (r *TypeRegistry) bindFuncWithName(v reflect.Value, name string) int {
+func (r *TypeRegistry) bindFunc(key typeKey, v reflect.Value) uint16 {
 	r.mx.Lock()
-	id := r.assignTypeId(name)
+	id := r.assignTypeId(key)
 	r.funcs[id] = v
 	r.mx.Unlock()
 	return id
 }
 
-func (r *TypeRegistry) assignTypeId(name string) int {
-	id, exists := r.ids[name]
+func (r *TypeRegistry) assignTypeId(key typeKey) uint16 {
+	id, exists := r.ids[key]
 	if !exists {
-		id = len(r.ids) + 1
-		r.ids[name] = id
+		id = uint16(len(r.ids) + 1)
+		r.ids[key] = id
 	}
 	return id
 }

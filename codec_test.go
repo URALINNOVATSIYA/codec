@@ -84,7 +84,7 @@ func registry() (*TypeRegistry, func(v any) byte) {
 	reg := NewTypeRegistry(true)
 	return reg, func(v any) byte {
 		id := reg.typeIdByValue(reflect.ValueOf(v))
-		return u2bs(nil, uint64(id), 3)[0]
+		return t2b0(id)
 	}
 }
 
@@ -92,11 +92,11 @@ func registryWithFuncId() (*TypeRegistry, func(v any) byte, func(v any) byte) {
 	reg := NewTypeRegistry(true)
 	return reg, func(v any) byte {
 			id := reg.typeIdByValue(reflect.ValueOf(v))
-			return u2bs(nil, uint64(id), 3)[0]
+			return t2b0(id)
 		},
 		func(v any) byte {
 			id := reg.funcIdByValue(reflect.ValueOf(v))
-			return u2bs(nil, uint64(id), 3)[0]
+			return t2b0(id)
 		}
 }
 
@@ -2539,6 +2539,15 @@ func Test_ReferenceToTheSameValue(t *testing.T) {
 			nil,
 			nil,
 		},
+		// #20
+		{
+			[2]func(int, int) int{testSum, testSum},
+			nil,
+			func(_, actual any) bool {
+				a := actual.([2]func(int, int) int)
+				return defaultEq(a[0], testSum) && defaultEq(a[1], testSum)
+			},
+		},
 	}
 	runTests(items, reg, t)
 }
@@ -3130,6 +3139,21 @@ func Test_MixedContainerPointers(t *testing.T) {
 					return false
 				}
 				return true
+			},
+		},
+		// #10
+		{
+			func() any {
+				m := map[byte]byte{1: 2}
+				a := [2]map[byte]byte{m, m}
+				return [3]any{a, &a[1], &m}
+			}(),
+			nil,
+			func(expected, actual any) bool {
+				if !defaultEq(expected, actual) {
+					return false
+				}
+				return false
 			},
 		},
 	}
