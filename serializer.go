@@ -172,7 +172,8 @@ func (s *Serializer) addSlice(v reflect.Value, id int) (*reflex.Slice, bool) {
 
 func (s *Serializer) visit(v reflect.Value, parentId, parentContainerId int) {
 	id := s.addNode(parentId, v)
-	if isSerializableValue(v) && v.Kind() != reflect.Pointer {
+	if isSerializableValue(v) {
+		s.visitSerializable(v, id)
 		return
 	}
 	switch v.Kind() {
@@ -192,6 +193,21 @@ func (s *Serializer) visit(v reflect.Value, parentId, parentContainerId int) {
 		s.visitStruct(v, id)
 	case reflect.Array, reflect.Slice:
 		s.visitList(v, id)
+	}
+}
+
+func (s *Serializer) visitSerializable(v reflect.Value, id int) {
+	if v.Kind() != reflect.Pointer || v.IsNil() {
+		return
+	}
+	addr := addr{
+		ptr: v.Pointer(),
+		t:   v.Type(),
+	}
+	if ref, exists := s.addrs[addr]; exists {
+		s.refs[id] = ref
+	} else {
+		s.addrs[addr] = id
 	}
 }
 

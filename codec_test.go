@@ -1615,6 +1615,18 @@ func Test_Interface(t *testing.T) {
 		// #6
 		{
 			func() any {
+				i := testSerializablePointerInt(123)
+				return &i
+			}(),
+			nil,
+			func(_, actual any) bool {
+				i, ok := actual.(*testSerializablePointerInt)
+				return ok && *i == 124
+			},
+		},
+		// #7
+		{
+			func() any {
 				var x testInterface
 				x = testSerializableInt(111)
 				return x
@@ -1622,7 +1634,7 @@ func Test_Interface(t *testing.T) {
 			nil,
 			nil,
 		},
-		// #7
+		// #8
 		{
 			func() any {
 				var p *graphNode
@@ -1634,7 +1646,7 @@ func Test_Interface(t *testing.T) {
 				return ok && p == nil
 			},
 		},
-		// #8
+		// #9
 		{
 			func() any {
 				n := 5

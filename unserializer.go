@@ -269,7 +269,12 @@ func (u *Unserializer) decodeSerializable(t reflect.Type, v reflect.Value) {
 	case meta_ref, meta_nil:
 		return
 	}
-	res := v.MethodByName("Unserialize").Call(
+	receiver := v
+	pointerValue := t.Kind() == reflect.Pointer
+	if pointerValue && receiver.IsNil() {
+		receiver = reflect.New(t.Elem())
+	}
+	res := receiver.MethodByName("Unserialize").Call(
 		[]reflect.Value{
 			reflect.ValueOf(u.readBytes(u.decodeLength())),
 		},
@@ -284,12 +289,16 @@ func (u *Unserializer) decodeSerializable(t reflect.Type, v reflect.Value) {
 	value := res[0].Elem()
 	if t.Kind() == reflect.Pointer {
 		t = t.Elem()
-		v = reflect.New(t).Elem()
 	}
 	if value.Type().ConvertibleTo(t) {
 		value = value.Convert(t)
 	} else {
 		panic(fmt.Errorf("Serializable.Unserialize returned %v, want %v", value.Type(), t))
+	}
+	if pointerValue {
+		v.Set(reflect.New(t))
+		v.Elem().Set(value)
+		return
 	}
 	v.Set(value)
 }

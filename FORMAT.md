@@ -118,11 +118,11 @@ Unsigned integers are stored using the minimum byte count. The first byte stores
 how many bytes are used in total, encoded in the leading length bits. The value
 bits then follow in the remaining bits of that byte and in subsequent bytes.
 
-Two width families are used:
+The following width families are used:
 
 | Encoding | Length bits | Used for |
 | --- | ---: | --- |
-| `u3` | 3 | type IDs and function IDs |
+| `u2` | 2 | type IDs and function IDs |
 | `u4` | 4 | counts, lengths, capacities, indexes, references |
 
 For example, `u4` reserves the four most significant bits of the first byte for
@@ -141,13 +141,13 @@ This is the same zigzag-like transform used for compact signed representation.
 
 ## Type identifiers
 
-Every top-level node and every dynamic interface value begins with a `u3` type
+Every top-level node and every dynamic interface value begins with a `u2` type
 ID. Nested fields and elements inherit the type of their container and do not
 carry an additional type ID of their own.
 
 The type ID is resolved through a `TypeRegistry`. The decoder must have an
 identical registry or otherwise the same type/function mappings used by the
-encoder. Function values are encoded with a second `u3` function ID in the
+encoder. Function values are encoded with a second `u2` function ID in the
 payload.
 
 ## Value encoding
@@ -211,7 +211,7 @@ A non-nil function is encoded as:
 meta_nonil function_id
 ```
 
-where `function_id` is a `u3` taken from the registry. The function value itself
+where `function_id` is a `u2` taken from the registry. The function value itself
 is not serialized; the decoder resolves it from the registry.
 
 A non-nil channel is encoded as:
@@ -332,4 +332,3 @@ resolved after the node stream has been decoded, not while it is being read.
   decoder registry.
 - The format is versioned but not self-contained; a decoder still needs the
   matching Go types and registered functions.
-
