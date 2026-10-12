@@ -119,18 +119,42 @@ func BenchmarkCodec(b *testing.B) {
 === RUN   BenchmarkCodec/Encode
 BenchmarkCodec/Encode
 
+OPTIMIZED
+=== RUN   BenchmarkCodec/Encode/Scalar
+BenchmarkCodec/Encode/Scalar
+BenchmarkCodec/Encode/Scalar-16                           3218010            328.5 ns/op          18.27 MB/s       24 B/op           3 allocs/op
 === RUN   BenchmarkCodec/Encode/Scalar
 BenchmarkCodec/Encode/Scalar
 BenchmarkCodec/Encode/Scalar-16                           4173872            271.7 ns/op          22.08 MB/s       24 B/op           3 allocs/op
+
+OPTIMIZED
 === RUN   BenchmarkCodec/Encode/Struct
 BenchmarkCodec/Encode/Struct
+BenchmarkCodec/Encode/Struct-16                           143820             9754 ns/op           4.31 MB/s        1800 B/op         70 allocs/op
+==== RUN   BenchmarkCodec/Encode/Struct
+BenchmarkCodec/Encode/Struct
 BenchmarkCodec/Encode/Struct-16                           150823             8238 ns/op           5.10 MB/s        1944 B/op         73 allocs/op
+
+OPTIMIZED
+=== RUN   BenchmarkCodec/Encode/ByteSlice64KiB
+BenchmarkCodec/Encode/ByteSlice64KiB
+BenchmarkCodec/Encode/ByteSlice64KiB-16                   22                 55635534 ns/op       1.18 MB/s        4886729 B/op      131115 allocs/op
 === RUN   BenchmarkCodec/Encode/ByteSlice64KiB
 BenchmarkCodec/Encode/ByteSlice64KiB
 BenchmarkCodec/Encode/ByteSlice64KiB-16                   21                 51103028 ns/op       1.28 MB/s        4888253 B/op      131116 allocs/op
+
+OPTIMIZED
+=== RUN   BenchmarkCodec/Encode/Map
+BenchmarkCodec/Encode/Map
+BenchmarkCodec/Encode/Map-16                              135376             8750 ns/op           5.26 MB/s        1744 B/op         63 allocs/op
 === RUN   BenchmarkCodec/Encode/Map
 BenchmarkCodec/Encode/Map
 BenchmarkCodec/Encode/Map-16                              140082             7352 ns/op           6.26 MB/s        1801 B/op         67 allocs/op
+
+OPTIMIZED
+=== RUN   BenchmarkCodec/Encode/GraphWithAliases
+BenchmarkCodec/Encode/GraphWithAliases
+BenchmarkCodec/Encode/GraphWithAliases-16                 94238              12797 ns/op          4.61 MB/s        2232 B/op         91 allocs/op
 === RUN   BenchmarkCodec/Encode/GraphWithAliases
 BenchmarkCodec/Encode/GraphWithAliases
 BenchmarkCodec/Encode/GraphWithAliases-16                 115999             10170 ns/op          5.80 MB/s        2816 B/op         104 allocs/op

@@ -25,20 +25,15 @@ const (
 )
 
 type addr struct {
+	t   reflect.Type
 	ptr uintptr
-	t uint16
-}
-
-type val struct {
-	id int
-	flag byte
 }
 
 type Serializer struct {
 	typeRegistry *TypeRegistry
 	values       []reflect.Value
 	slices       *reflex.SliceMap
-	addrs        map[addr]val
+	addrs        map[addr]int
 	parents      map[int]int
 	childs       map[int][]int
 	ptrs         map[int][]int
@@ -50,7 +45,7 @@ func NewSerializer() *Serializer {
 	return &Serializer{
 		typeRegistry: GetDefaultTypeRegistry(),
 		slices:       reflex.NewSliceMap(-2),
-		addrs:        make(map[addr]val),
+		addrs:        make(map[addr]int),
 		parents:      make(map[int]int),
 		childs:       make(map[int][]int),
 		ptrs:         make(map[int][]int),
@@ -117,21 +112,17 @@ func (s *Serializer) addNode(parentId int, v reflect.Value) int {
 func (s *Serializer) addContainer(v reflect.Value, containerId int) bool {
 	addr := addr{
 		ptr: uintptr(reflex.PtrOf(v)),
-		t: s.typeRegistry.typeIdByValue(v),
+		t:   v.Type(),
 	}
-	value, exists := s.addrs[addr]
-	if value.flag & 0b1 != 0 {
-		s.refs[containerId] = value.id
+	id, exists := s.addrs[addr]
+	if id < 0 {
+		s.refs[containerId] = -id
 		return false
 	}
-	s.addrs[addr] = val{
-		id: containerId,
-		flag: value.flag | 0b1,
-	}
-	if !exists || value.flag & 0b10 == 0 {
+	s.addrs[addr] = -containerId
+	if !exists {
 		return true
 	}
-	id := value.id
 	prevParentId := s.parents[id]
 	s.childs[prevParentId] = slices.DeleteFunc(s.childs[prevParentId], func(i int) bool {
 		return i == id
@@ -156,21 +147,14 @@ func (s *Serializer) addContainer(v reflect.Value, containerId int) bool {
 func (s *Serializer) addReference(v reflect.Value, id int) bool {
 	addr := addr{
 		ptr: uintptr(reflex.DataPtrOf(v)),
-		t: s.typeRegistry.typeIdByValue(v),
+		t:   v.Type(),
 	}
 	ref, exists := s.addrs[addr]
 	if exists {
-		if ref.flag & 0b1 != 0 { // container
-			s.refs[id] = s.childs[ref.id][0]
-		} else {
-			s.refs[id] = ref.id
-		}
+		s.refs[id] = ref
 		return true
 	}
-	s.addrs[addr] = val{
-		id: id,
-		flag: ref.flag | 0b100,
-	}
+	s.addrs[addr] = id
 	return false
 }
 
@@ -283,22 +267,22 @@ func (s *Serializer) visitPointer(v reflect.Value, id, parentContainerId int) {
 	elem := v.Elem()
 	addr := addr{
 		ptr: uintptr(reflex.PtrOf(elem)),
-		t: s.typeRegistry.typeIdByValue(elem),
+		t:   elem.Type(),
 	}
 	if parentContainerId > 0 {
 		id = parentContainerId
 	}
 	ref, exists := s.addrs[addr]
 	if exists {
-		s.ptrs[ref.id] = append(s.ptrs[ref.id], id)
+		if ref < 0 {
+			ref = -ref
+		}
+		s.ptrs[ref] = append(s.ptrs[ref], id)
 		return
 	}
 	nextId := len(s.values)
 	s.ptrs[nextId] = append(s.ptrs[nextId], id)
-	s.addrs[addr] = val{
-		id: nextId,
-		flag: ref.flag | 0b10,
-	}
+	s.addrs[addr] = nextId
 	s.visit(elem, -1, -1)
 }
 

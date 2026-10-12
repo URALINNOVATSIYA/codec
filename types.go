@@ -10,7 +10,7 @@ import (
 )
 
 type typeKey struct {
-	t reflect.Type
+	t        reflect.Type
 	funcName string
 }
 
@@ -122,7 +122,7 @@ func (r *TypeRegistry) RegisterFunc(f any) {
 		panic(fmt.Errorf("argument of RegisterFunc is not function"))
 	}
 	key := typeKey{
-		t: v.Type(),
+		t:        v.Type(),
 		funcName: reflex.FuncNameOf(v),
 	}
 	r.mx.RLock()
@@ -189,7 +189,7 @@ func (r *TypeRegistry) funcIdByValue(v reflect.Value) uint16 {
 		panic("argument must be a function")
 	}
 	key := typeKey{
-		t: v.Type(),
+		t:        v.Type(),
 		funcName: reflex.FuncNameOf(v),
 	}
 	r.mx.RLock()
