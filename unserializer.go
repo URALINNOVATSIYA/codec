@@ -72,11 +72,11 @@ func (u *Unserializer) Decode(data []byte) (value any, err error) {
 	if len(data) == 0 {
 		return nil, io.ErrUnexpectedEOF
 	}
-	/*defer func() {
+	defer func() {
 		if e := recover(); e != nil {
 			err = fmt.Errorf("%s", e)
 		}
-	}()*/
+	}()
 	u.clear()
 	u.data = data
 	u.size = len(data)
@@ -205,8 +205,7 @@ func (u *Unserializer) decodeValue(t reflect.Type, v reflect.Value) reflect.Valu
 		u.decodeSerializable(t, v)
 		return v
 	}
-	kind := v.Kind()
-	switch kind {
+	switch v.Kind() {
 	case reflect.Invalid:
 		u.decodeNil()
 	case reflect.Bool:
@@ -500,8 +499,7 @@ func (u *Unserializer) decodeInterface(v reflect.Value) {
 	if t != nil {
 		switch t.Kind() {
 		case reflect.Array, reflect.Struct:
-			elem := reflex.Zero(t)
-			v.Set(elem)
+			v.Set(reflex.Zero(t))
 			u.decodeValue(t, v.Elem())
 			return
 		}
@@ -522,15 +520,12 @@ func (u *Unserializer) decodePointer(t reflect.Type, v reflect.Value) {
 }
 
 func (u *Unserializer) decodeContainer(containerType reflect.Type, containerValue reflect.Value) reflect.Value {
-	containerValue = reflect.NewAt(containerType, reflex.PtrOf(containerValue)).Elem()
+	containerValue = reflex.PtrAt(containerType, containerValue).Elem()
 	if _, exists := u.values[u.id]; exists {
 		u.values[u.id] = containerValue
 	}
 	u.id++
-	v := u.decodeValue(containerType, containerValue)
-	if v.IsValid() {
-		containerValue.Set(v)
-	}
+	u.decodeValue(containerType, containerValue)
 	return containerValue
 }
 

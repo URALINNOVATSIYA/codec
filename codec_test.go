@@ -1362,6 +1362,7 @@ func Test_PointersToTheSameValue(t *testing.T) {
 				return s.A != s.B
 			},
 		},
+		// #5
 		{
 			func() any {
 				leaf := &graphNode{Value: 99}
@@ -1383,6 +1384,7 @@ func Test_PointersToTheSameValue(t *testing.T) {
 					a.L.Next == a.R.Next && a.L.Next.Value == 99
 			},
 		},
+		// #6
 		{
 			func() any {
 				return struct {
