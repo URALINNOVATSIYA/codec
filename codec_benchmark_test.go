@@ -122,7 +122,7 @@ BenchmarkCodec/Encode
 OPTIMIZED
 === RUN   BenchmarkCodec/Encode/Scalar
 BenchmarkCodec/Encode/Scalar
-BenchmarkCodec/Encode/Scalar-16                           3218010            328.5 ns/op          18.27 MB/s       24 B/op           3 allocs/op
+BenchmarkCodec/Encode/Scalar-16                           3519465            357.5 ns/op          16.78 MB/s       24 B/op           3 allocs/op
 === RUN   BenchmarkCodec/Encode/Scalar
 BenchmarkCodec/Encode/Scalar
 BenchmarkCodec/Encode/Scalar-16                           4173872            271.7 ns/op          22.08 MB/s       24 B/op           3 allocs/op
@@ -130,7 +130,7 @@ BenchmarkCodec/Encode/Scalar-16                           4173872            271
 OPTIMIZED
 === RUN   BenchmarkCodec/Encode/Struct
 BenchmarkCodec/Encode/Struct
-BenchmarkCodec/Encode/Struct-16                           143820             9754 ns/op           4.31 MB/s        1800 B/op         70 allocs/op
+BenchmarkCodec/Encode/Struct-16                           156063             8160 ns/op           5.15 MB/s        1128 B/op         42 allocs/op
 ==== RUN   BenchmarkCodec/Encode/Struct
 BenchmarkCodec/Encode/Struct
 BenchmarkCodec/Encode/Struct-16                           150823             8238 ns/op           5.10 MB/s        1944 B/op         73 allocs/op
@@ -138,7 +138,7 @@ BenchmarkCodec/Encode/Struct-16                           150823             823
 OPTIMIZED
 === RUN   BenchmarkCodec/Encode/ByteSlice64KiB
 BenchmarkCodec/Encode/ByteSlice64KiB
-BenchmarkCodec/Encode/ByteSlice64KiB-16                   22                 55635534 ns/op       1.18 MB/s        4886729 B/op      131115 allocs/op
+BenchmarkCodec/Encode/ByteSlice64KiB-16                   25                 52209949 ns/op       1.26 MB/s        3313544 B/op       65576 allocs/op
 === RUN   BenchmarkCodec/Encode/ByteSlice64KiB
 BenchmarkCodec/Encode/ByteSlice64KiB
 BenchmarkCodec/Encode/ByteSlice64KiB-16                   21                 51103028 ns/op       1.28 MB/s        4888253 B/op      131116 allocs/op
@@ -146,7 +146,7 @@ BenchmarkCodec/Encode/ByteSlice64KiB-16                   21                 511
 OPTIMIZED
 === RUN   BenchmarkCodec/Encode/Map
 BenchmarkCodec/Encode/Map
-BenchmarkCodec/Encode/Map-16                              135376             8750 ns/op           5.26 MB/s        1744 B/op         63 allocs/op
+BenchmarkCodec/Encode/Map-16                              174445             7111 ns/op           6.47 MB/s        1120 B/op         37 allocs/op
 === RUN   BenchmarkCodec/Encode/Map
 BenchmarkCodec/Encode/Map
 BenchmarkCodec/Encode/Map-16                              140082             7352 ns/op           6.26 MB/s        1801 B/op         67 allocs/op
@@ -154,10 +154,16 @@ BenchmarkCodec/Encode/Map-16                              140082             735
 OPTIMIZED
 === RUN   BenchmarkCodec/Encode/GraphWithAliases
 BenchmarkCodec/Encode/GraphWithAliases
-BenchmarkCodec/Encode/GraphWithAliases-16                 94238              12797 ns/op          4.61 MB/s        2232 B/op         91 allocs/op
+BenchmarkCodec/Encode/GraphWithAliases-16                 114171             10383 ns/op          5.68 MB/s        1440 B/op          58 allocs/op
 === RUN   BenchmarkCodec/Encode/GraphWithAliases
 BenchmarkCodec/Encode/GraphWithAliases
 BenchmarkCodec/Encode/GraphWithAliases-16                 115999             10170 ns/op          5.80 MB/s        2816 B/op         104 allocs/op
+
+OPTIMIZED
+=== RUN   BenchmarkCodec/Encode/LargeStruct
+BenchmarkCodec/Encode/LargeStruct
+BenchmarkCodec/Encode/LargeStruct-16                          25             44423995 ns/op       1.48 MB/s       3314274 B/op        65603 allocs/op
+
 
 === RUN   BenchmarkCodec/Decode
 BenchmarkCodec/Decode
