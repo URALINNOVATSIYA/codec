@@ -3172,6 +3172,39 @@ func Test_MixedContainerPointers(t *testing.T) {
 				return a[0].([2]map[byte]byte)[1][1] == 2 && a[3].(*[2]map[byte]byte)[1][100] == 200
 			},
 		},
+		// #11
+		{
+			func() any {
+				i1 := 1
+				i2 := 2
+				m := map[testS1][1]*int{
+					{F1: &i1}: {&i2},
+					{F1: &i2}: {&i1},
+				}
+				return &testS1{
+					F1: m,
+				}
+			}(),
+			nil,
+			func(_, actual any) bool {
+				m := actual.(*testS1).F1.(map[testS1][1]*int)
+				for k, v := range m {
+					if *k.F1.(*int) != 1 && *v[0] != 2 && *k.F1.(*int) != 2 && *v[0] != 1 {
+						return false
+					}
+				}
+				return true
+			},
+		},
+		// #12
+		{
+			map[byte]string{1: "abc", 2: "abc", 3: "abc"},
+			nil,
+			func(_, actual any) bool {
+				m := actual.(map[byte]string)
+				return m[1] == "abc" && m[2] == "abc" && m[3] == "abc"
+			},
+		},
 	}
 	runTests(items, reg, t)
 }

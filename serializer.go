@@ -83,8 +83,8 @@ func (s *Serializer) clear() {
 }
 
 func (s *Serializer) Encode(v any) []byte {
+	defer s.clear()
 	b := s.encode(reflect.ValueOf(v))
-	s.clear()
 	return b
 }
 

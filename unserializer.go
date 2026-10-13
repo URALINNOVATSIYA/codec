@@ -61,6 +61,8 @@ func (u *Unserializer) WithTypeRegistry(registry *TypeRegistry) *Unserializer {
 func (u *Unserializer) clear() {
 	u.id = 0
 	u.pos = 0
+	u.size = 0
+	u.data = nil
 	clear(u.values)
 	clear(u.slices)
 	clear(u.refs)
@@ -72,12 +74,12 @@ func (u *Unserializer) Decode(data []byte) (value any, err error) {
 	if len(data) == 0 {
 		return nil, io.ErrUnexpectedEOF
 	}
+	defer u.clear()
 	defer func() {
 		if e := recover(); e != nil {
 			err = fmt.Errorf("%s", e)
 		}
 	}()
-	u.clear()
 	u.data = data
 	u.size = len(data)
 	if u.readByte()&0b1111 != version {
@@ -105,9 +107,9 @@ func (u *Unserializer) decodeRefs() {
 	if u.data[0]&meta_sref == 0 {
 		return
 	}
-	for range u.decodeLength() {
+	for range u.decodeCount() {
 		referencedValueId := u.decodeId()
-		refCount := u.decodeLength()
+		refCount := u.decodeCount()
 		values := make([]int, refCount)
 		for i := range refCount {
 			id := u.decodeId()
@@ -123,9 +125,9 @@ func (u *Unserializer) decodePointers() {
 	if u.data[0]&meta_sptr == 0 {
 		return
 	}
-	for range u.decodeLength() {
+	for range u.decodeCount() {
 		pointedValueId := u.decodeId()
-		ptrCount := u.decodeLength()
+		ptrCount := u.decodeCount()
 		values := make([]int, ptrCount)
 		for i := range ptrCount {
 			id := u.decodeId()
@@ -141,15 +143,15 @@ func (u *Unserializer) decodeSlices() {
 	if u.data[0]&meta_sslc == 0 {
 		return
 	}
-	for range u.decodeLength() {
+	for range u.decodeCount() {
 		parentSliceId := u.decodeId()
-		sliceCount := u.decodeLength()
+		sliceCount := u.decodeCount()
 		values := make([]sliceExp, sliceCount)
 		for n := range sliceCount {
 			id := u.decodeId()
-			i := u.decodeLength()
-			j := u.decodeLength()
-			k := u.decodeLength()
+			i := u.decodeIndex()
+			j := u.decodeIndex()
+			k := u.decodeIndex()
 			values[n] = sliceExp{
 				id: id,
 				i:  i,
@@ -170,7 +172,7 @@ func (u *Unserializer) decodeNodes() {
 	}
 }
 
-func (u *Unserializer) decodeCount(sizeBits int) uint64 {
+func (u *Unserializer) decodeInteger(sizeBits int) uint64 {
 	cnt, length := bs2u(u.data[u.pos:], sizeBits)
 	if length <= 0 {
 		panic(io.ErrUnexpectedEOF)
@@ -180,15 +182,43 @@ func (u *Unserializer) decodeCount(sizeBits int) uint64 {
 }
 
 func (u *Unserializer) decodeId() int {
-	return int(u.decodeCount(4))
+	return int(u.decodeInteger(4))
 }
 
-func (u *Unserializer) decodeLength() int {
-	return int(u.decodeCount(4))
+func (u *Unserializer) decodeTypeId() uint16 {
+	return uint16(u.decodeInteger(2))
+}
+
+func (u *Unserializer) decodeCount() int {
+	count := int(u.decodeInteger(4))
+	if count > u.size-u.pos {
+		panic("too large counter value")
+	}
+	return count
+}
+
+func (u *Unserializer) decodeSize() int {
+	size := int(u.decodeInteger(4))
+	if size > u.size-u.pos {
+		panic("too large size value")
+	}
+	return size
+}
+
+func (u *Unserializer) decodeIndex() int {
+	idx := int(u.decodeInteger(4))
+	if idx > u.size {
+		panic("too large index value")
+	}
+	return idx
+}
+
+func (u *Unserializer) decodeCapacity() int {
+	return int(u.decodeInteger(4))
 }
 
 func (u *Unserializer) decodeType() reflect.Type {
-	return u.typeRegistry.typeById(uint16(u.decodeCount(2)))
+	return u.typeRegistry.typeById(u.decodeTypeId())
 }
 
 func (u *Unserializer) decodeNode() reflect.Value {
@@ -276,7 +306,7 @@ func (u *Unserializer) decodeSerializable(t reflect.Type, v reflect.Value) {
 	}
 	res := receiver.MethodByName("Unserialize").Call(
 		[]reflect.Value{
-			reflect.ValueOf(u.readBytes(u.decodeLength())),
+			reflect.ValueOf(u.readBytes(u.decodeSize())),
 		},
 	)
 	err := res[1]
@@ -320,27 +350,27 @@ func (u *Unserializer) decodeInt8(v reflect.Value) {
 }
 
 func (u *Unserializer) decodeUint16(v reflect.Value) {
-	v.SetUint(u.decodeCount(2))
+	v.SetUint(u.decodeInteger(2))
 }
 
 func (u *Unserializer) decodeInt16(v reflect.Value) {
-	v.SetInt(u2i(u.decodeCount(2)))
+	v.SetInt(u2i(u.decodeInteger(2)))
 }
 
 func (u *Unserializer) decodeUint32(v reflect.Value) {
-	v.SetUint(u.decodeCount(3))
+	v.SetUint(u.decodeInteger(3))
 }
 
 func (u *Unserializer) decodeInt32(v reflect.Value) {
-	v.SetInt(u2i(u.decodeCount(3)))
+	v.SetInt(u2i(u.decodeInteger(3)))
 }
 
 func (u *Unserializer) decodeUint64(v reflect.Value) {
-	v.SetUint(u.decodeCount(4))
+	v.SetUint(u.decodeInteger(4))
 }
 
 func (u *Unserializer) decodeInt64(v reflect.Value) {
-	v.SetInt(u2i(u.decodeCount(4)))
+	v.SetInt(u2i(u.decodeInteger(4)))
 }
 
 func (u *Unserializer) decodeUint(v reflect.Value) {
@@ -356,7 +386,7 @@ func (u *Unserializer) decodeFloat32(v reflect.Value) {
 }
 
 func (u *Unserializer) readFloat32() float32 {
-	return math.Float32frombits(bits.ReverseBytes32(uint32(u.decodeCount(3))))
+	return math.Float32frombits(bits.ReverseBytes32(uint32(u.decodeInteger(3))))
 }
 
 func (u *Unserializer) decodeFloat64(v reflect.Value) {
@@ -364,7 +394,7 @@ func (u *Unserializer) decodeFloat64(v reflect.Value) {
 }
 
 func (u *Unserializer) readFloat64() float64 {
-	return math.Float64frombits(bits.ReverseBytes64(u.decodeCount(4)))
+	return math.Float64frombits(bits.ReverseBytes64(u.decodeInteger(4)))
 }
 
 func (u *Unserializer) decodeComplex64(v reflect.Value) {
@@ -384,7 +414,7 @@ func (u *Unserializer) decodeUintptr(v reflect.Value) {
 }
 
 func (u *Unserializer) decodeUnsafePointer(v reflect.Value) {
-	v.SetPointer(unsafe.Pointer(uintptr(u.decodeCount(4))))
+	v.SetPointer(unsafe.Pointer(uintptr(u.decodeInteger(4))))
 }
 
 func (u *Unserializer) decodeChan(v reflect.Value) {
@@ -392,7 +422,7 @@ func (u *Unserializer) decodeChan(v reflect.Value) {
 	case meta_ref, meta_nil:
 		return
 	}
-	cap := u.decodeLength()
+	cap := u.decodeCapacity()
 	t := v.Type()
 	if t.ChanDir() == reflect.BothDir {
 		v.Set(reflect.MakeChan(t, cap))
@@ -410,7 +440,7 @@ func (u *Unserializer) decodeFunc(v reflect.Value) {
 	case meta_ref, meta_nil:
 		return
 	}
-	f := u.typeRegistry.funcById(uint16(u.decodeCount(2)))
+	f := u.typeRegistry.funcById(u.decodeTypeId())
 	v.Set(reflex.MakeExported(f))
 }
 
@@ -419,14 +449,11 @@ func (u *Unserializer) decodeMap(t reflect.Type, v reflect.Value) {
 	case meta_ref, meta_nil:
 		return
 	}
-	size := u.decodeLength()
+	size := u.decodeSize()
 	v.Set(reflect.MakeMapWithSize(t, size))
 	keyType := t.Key()
-	keyKind := keyType.Kind()
 	valueType := t.Elem()
-	valueKind := valueType.Kind()
-	if keyKind != reflect.Pointer && keyKind != reflect.Interface &&
-		valueKind != reflect.Pointer && valueKind != reflect.Interface {
+	if u.isScalar(keyType.Kind()) && u.isScalar(valueType.Kind()) {
 		for range size {
 			key := u.decodeValue(keyType, reflex.Zero(keyType))
 			value := u.decodeValue(valueType, reflex.Zero(valueType))
@@ -451,12 +478,21 @@ func (u *Unserializer) decodeMap(t reflect.Type, v reflect.Value) {
 	u.maps[id] = entries
 }
 
+func (u *Unserializer) isScalar(kind reflect.Kind) bool {
+	switch kind {
+	case reflect.Pointer, reflect.Interface, reflect.Array, reflect.Struct,
+		reflect.Slice, reflect.String, reflect.Func, reflect.Chan:
+		return false
+	}
+	return true
+}
+
 func (u *Unserializer) decodeString(v reflect.Value) {
 	if u.topIsRef() {
 		u.readByte()
 		return
 	}
-	v.SetString(string(u.readBytes(u.decodeLength())))
+	v.SetString(string(u.readBytes(u.decodeSize())))
 }
 
 func (u *Unserializer) decodeSlice(t reflect.Type, v reflect.Value) {
@@ -464,8 +500,8 @@ func (u *Unserializer) decodeSlice(t reflect.Type, v reflect.Value) {
 	case meta_ref, meta_nil:
 		return
 	}
-	length := u.decodeLength()
-	capacity := u.decodeLength()
+	length := u.decodeSize()
+	capacity := u.decodeCapacity()
 	v.Set(reflect.MakeSlice(t, length, capacity))
 	elemType := t.Elem()
 	for i := range length {
@@ -492,7 +528,7 @@ func (u *Unserializer) decodeStruct(v reflect.Value) {
 	}
 	fieldCount := v.NumField()
 	tags := u.typeRegistry.tagsByValue(v)
-	for range u.decodeLength() {
+	for range u.decodeCount() {
 		id := u.decodeId()
 		i := tags.IndexById(id)
 		if i < 0 || i >= fieldCount {

@@ -42,7 +42,7 @@ func (r *TypeRegistry) TurnOffTypeAutoRegistration() {
 }
 
 func (r *TypeRegistry) RegisteredTypeNames() []string {
-	names := make([]string, len(r.ids))
+	names := make([]string, len(r.ids)+1)
 	for key, i := range r.ids {
 		names[i] = reflex.NameOf(key.t)
 	}
